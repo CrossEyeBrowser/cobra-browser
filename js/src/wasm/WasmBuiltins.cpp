@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2017 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -136,6 +134,14 @@ constexpr SymbolicAddressSignature SASigPowD = {
     SymbolicAddress::PowD, _F64, _Infallible, _NoTrap, 2, {_F64, _F64, _END}};
 constexpr SymbolicAddressSignature SASigATan2D = {
     SymbolicAddress::ATan2D, _F64, _Infallible, _NoTrap, 2, {_F64, _F64, _END}};
+
+constexpr SymbolicAddressSignature SASigAddSubI128 = {
+    SymbolicAddress::AddSubI128, _VOID, _Infallible, _NoTrap, 2,
+    {_PTR, _I32, _END}};
+constexpr SymbolicAddressSignature SASigMulI64Wide = {
+    SymbolicAddress::MulI64Wide, _VOID, _Infallible, _NoTrap, 2,
+    {_PTR, _I32, _END}};
+
 constexpr SymbolicAddressSignature SASigArrayMemMove = {
     SymbolicAddress::ArrayMemMove,
     _VOID,
@@ -1511,6 +1517,12 @@ void* wasm::AddressOf(SymbolicAddress imm, ABIFunctionType* abiType) {
     case SymbolicAddress::ATan2D:
       *abiType = Args_Double_DoubleDouble;
       return FuncCast(ecmaAtan2, *abiType);
+    case SymbolicAddress::AddSubI128:
+      *abiType = Args_Void_GeneralInt32;
+      return FuncCast(Instance::addSubI128, *abiType);
+    case SymbolicAddress::MulI64Wide:
+      *abiType = Args_Void_GeneralInt32;
+      return FuncCast(Instance::mulI64Wide, *abiType);
     case SymbolicAddress::ArrayMemMove:
       *abiType = Args_Void_GeneralInt32GeneralInt32Int32Int32;
       return FuncCast(WasmArrayMemMove, *abiType);
@@ -1864,6 +1876,8 @@ bool wasm::NeedsBuiltinThunk(SymbolicAddress sym) {
     case SymbolicAddress::LogD:
     case SymbolicAddress::PowD:
     case SymbolicAddress::ATan2D:
+    case SymbolicAddress::AddSubI128:
+    case SymbolicAddress::MulI64Wide:
     case SymbolicAddress::ArrayMemMove:
     case SymbolicAddress::ArrayRefsMove:
     case SymbolicAddress::MemoryGrowM32:
@@ -2184,9 +2198,8 @@ bool wasm::EnsureBuiltinThunksInitialized(
     return false;
   }
 
-  for (TypedNativeToFuncPtrMap::Range r = typedNatives.all(); !r.empty();
-       r.popFront()) {
-    TypedNative typedNative = r.front().key();
+  for (auto iter = typedNatives.iter(); !iter.done(); iter.next()) {
+    TypedNative typedNative = iter.get().key();
 
     uint32_t codeRangeIndex = thunks->codeRanges.length();
     if (!thunks->typedNativeToCodeRange.putNew(typedNative, codeRangeIndex)) {
@@ -2194,7 +2207,7 @@ bool wasm::EnsureBuiltinThunksInitialized(
     }
 
     ABIFunctionType abiType = typedNative.abiType;
-    void* funcPtr = r.front().value();
+    void* funcPtr = iter.get().value();
 
     ExitReason exitReason = ExitReason::Fixed::BuiltinNative;
 

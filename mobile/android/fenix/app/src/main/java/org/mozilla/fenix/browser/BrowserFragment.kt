@@ -53,6 +53,7 @@ import org.mozilla.fenix.components.toolbar.ToolbarMenu
 import org.mozilla.fenix.components.toolbar.ui.createShareBrowserAction
 import org.mozilla.fenix.compose.snackbar.Snackbar
 import org.mozilla.fenix.compose.snackbar.SnackbarState
+import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.nav
@@ -76,7 +77,7 @@ import org.mozilla.fenix.GleanMetrics.Toolbar as GleanMetricsToolbar
  * Fragment used for browsing the web within the main app.
  */
 @Suppress("TooManyFunctions", "LargeClass")
-class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
+class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemInsetsPaddedFragment {
     private val windowFeature = ViewBoundFeatureWrapper<WindowFeature>()
     private val openInAppOnboardingObserver = ViewBoundFeatureWrapper<OpenInAppOnboardingObserver>()
     private val translationsBinding = ViewBoundFeatureWrapper<TranslationsBinding>()
@@ -179,7 +180,9 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     }
 
     private fun setupShakeDetection() {
-        if (!requireComponents.core.summarizeFeatureDiscoverySettings.canShowFeature) {
+        val shouldSetupShake = requireComponents.core.summarizeFeatureSettings.canShowFeature &&
+                requireComponents.core.summarizationSettings.isGestureEnabled.value
+        if (!shouldSetupShake) {
             return
         }
 
@@ -189,33 +192,62 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
             lifecycle.addObserver(accelerometer)
             lifecycleScope.launch {
                 viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    accelerometer.detectShakes().collect {
-                        findNavController().apply {
-                            // We don't want to navigate to the summarization fragment if the current
-                            // tab is private.
-                            val isPrivate = getSafeCurrentTab()?.content?.private == true
-
-                            // We don't want to navigate to the summarization fragment if the current
-                            // tab is loading.
-                            val isPageLoading = getSafeCurrentTab()?.content?.loading == true
-
-                            // Since the summarization fragment is in a dialog, it's possible that we
-                            // can still detect shakes in the background. Don't try to navigate twice.
-                            val currentDestinationIsNotTheBrowser = currentDestination?.id != R.id.browserFragment
-
-                            if (isPrivate || isPageLoading || currentDestinationIsNotTheBrowser) {
-                                return@collect
-                            }
-
-                            navigate(
-                                BrowserFragmentDirections.actionBrowserFragmentToSummarizationFragment(
-                                    true,
-                                ),
-                            )
+                    accelerometer.detectShakes()
+                        .collect {
+                            summarizeToolbarCfrBinding.get()?.maybeDismissCfr()
+                            navigateToSummarizationIfEligible()
                         }
-                    }
                 }
             }
+        }
+    }
+
+    private suspend fun navigateToSummarizationIfEligible() {
+        findNavController().apply {
+            // If the shake gesture was disabled in the bottom sheet hosted settings but the fragment
+            // has not been recreated yet, we need to check if it's still active before proceeding.
+            val shakeEnabled = requireComponents.core.summarizationSettings.isGestureEnabled.value
+
+            if (!shakeEnabled) {
+                return
+            }
+
+            // We don't want to navigate to the summarization fragment if the current
+            // tab is private.
+            val isPrivate = getSafeCurrentTab()?.content?.private == true
+
+            // We don't want to navigate to the summarization fragment if the current
+            // tab is loading.
+            val isPageLoading = getSafeCurrentTab()?.content?.loading == true
+
+            // Since the summarization fragment is in a dialog, it's possible that we
+            // can still detect shakes in the background. Don't try to navigate twice.
+            val currentDestinationIsNotTheBrowser = currentDestination?.id != R.id.browserFragment
+
+            // evaluate this lazy, to try and avoid querying the engine unless necessary
+            val isEnglishContent: suspend () -> Boolean = {
+                getSafeCurrentTab()?.engineState?.engineSession?.let { session ->
+                    requireComponents.core.summarizationEligibilityChecker
+                        .checkLanguage(session)
+                        .getOrNull()
+                } ?: false
+            }
+
+            // this can be removed when we get rid of language gating
+            @Suppress("ComplexCondition")
+            if (isPrivate ||
+                isPageLoading ||
+                currentDestinationIsNotTheBrowser ||
+                !isEnglishContent()
+            ) {
+                return
+            }
+
+            navigate(
+                BrowserFragmentDirections.actionBrowserFragmentToSummarizationFragment(
+                    true,
+                ),
+            )
         }
     }
 

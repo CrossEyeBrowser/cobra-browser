@@ -1,5 +1,3 @@
-/* -*- Mode: javascript; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4
- * -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -15,6 +13,7 @@
 #include "js/Conversions.h"
 #include "js/MapAndSet.h"
 #include "js/Modules.h"
+#include "js/Prefs.h"
 #include "js/PropertyAndElement.h"  // JS_DefineProperty, JS_GetProperty
 #include "js/SourceText.h"
 #include "js/StableStringChars.h"
@@ -115,8 +114,19 @@ bool ModuleLoader::ImportMetaResolve(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 bool ModuleLoader::loadRootModule(JSContext* cx, HandleString path) {
+  Rooted<JSAtom*> specifier(cx, AtomizeString(cx, path));
+  if (!specifier) {
+    return false;
+  }
+  RootedObject moduleRequest(
+      cx, ModuleRequestObject::create(cx, specifier, JS::ModuleType::JavaScript,
+                                      ImportPhase::Evaluation));
+  if (!moduleRequest) {
+    return false;
+  }
+
   RootedValue rval(cx);
-  if (!loadAndExecute(cx, path, nullptr, &rval)) {
+  if (!loadAndExecute(cx, path, moduleRequest, &rval)) {
     return false;
   }
 
@@ -192,6 +202,47 @@ bool ModuleLoader::LoadRejected(JSContext* cx, HandleValue hostDefined,
   return true;
 }
 
+#ifdef ENABLE_SOURCE_PHASE_IMPORTS
+// See https://github.com/tc39/test262/blob/main/INTERPRETING.md#modules
+// We don't currently support wasm modules, so instead we implement an empty
+// module with a valid [[ModuleSource]] slot for test262.
+JSObject* ModuleLoader::getOrCreateTest262ModuleSourceModule(JSContext* cx) {
+  RootedString key(cx, JS_NewStringCopyZ(cx, "<module source>"));
+  if (!key) {
+    return nullptr;
+  }
+
+  RootedObject module(cx);
+  if (!lookupModuleInRegistry(cx, JS::ModuleType::JavaScript, key, &module)) {
+    return nullptr;
+  }
+  if (module) {
+    return module;
+  }
+
+  JS::CompileOptions options(cx);
+  options.setFileAndLine("<module source>", 1);
+  JS::SourceText<char16_t> srcBuf;
+  if (!srcBuf.init(cx, u"", 0, JS::SourceOwnership::Borrowed)) {
+    return nullptr;
+  }
+  module = JS::CompileModule(cx, options, srcBuf);
+  if (!module) {
+    return nullptr;
+  }
+  Rooted<ModuleSourceObject*> moduleSource(cx, ModuleSourceObject::create(cx));
+  if (!moduleSource) {
+    return nullptr;
+  }
+  module->as<ModuleObject>().initModuleSourceSlot(moduleSource);
+
+  if (!addModuleToRegistry(cx, JS::ModuleType::JavaScript, key, module)) {
+    return nullptr;
+  }
+  return module;
+}
+#endif
+
 bool ModuleLoader::loadImportedModule(JSContext* cx,
                                       JS::Handle<JSScript*> referrer,
                                       JS::Handle<JSObject*> moduleRequest,
@@ -201,6 +252,22 @@ bool ModuleLoader::loadImportedModule(JSContext* cx,
     // This is a dynamic import.
     return dynamicImport(cx, referrer, moduleRequest, payload);
   }
+
+#ifdef ENABLE_SOURCE_PHASE_IMPORTS
+  if (JS::Prefs::experimental_source_phase_imports_test262_module_source()) {
+    js::ImportPhase phase = moduleRequest->as<ModuleRequestObject>().phase();
+    JSAtom* specifier = moduleRequest->as<ModuleRequestObject>().specifier();
+    if (phase == ImportPhase::Source &&
+        StringEquals(specifier, u"<module source>")) {
+      RootedObject module(cx, getOrCreateTest262ModuleSourceModule(cx));
+      if (!module) {
+        return false;
+      }
+      return JS::FinishLoadingImportedModule(cx, referrer, moduleRequest,
+                                             payload, module, false);
+    }
+  }
+#endif
 
   Rooted<JSLinearString*> path(cx, resolve(cx, moduleRequest, referrer));
   if (!path) {
@@ -354,6 +421,23 @@ bool ModuleLoader::doDynamicImport(JSContext* cx, JS::HandleScript referrer,
                                    JS::HandleValue payload) {
   // Exceptions during dynamic import are handled by calling
   // FinishLoadingImportedModule with a pending exception on the context.
+#ifdef ENABLE_SOURCE_PHASE_IMPORTS
+  if (JS::Prefs::experimental_source_phase_imports_test262_module_source()) {
+    js::ImportPhase phase = moduleRequest->as<ModuleRequestObject>().phase();
+    JSAtom* specifier = moduleRequest->as<ModuleRequestObject>().specifier();
+    if (phase == ImportPhase::Source &&
+        StringEquals(specifier, u"<module source>")) {
+      RootedObject module(cx, getOrCreateTest262ModuleSourceModule(cx));
+      if (!module) {
+        return JS::FinishLoadingImportedModuleFailedWithPendingException(
+            cx, payload);
+      }
+      return JS::FinishLoadingImportedModule(cx, nullptr, moduleRequest,
+                                             payload, module, false);
+    }
+  }
+#endif
+
   Rooted<JSLinearString*> path(cx, resolve(cx, moduleRequest, referrer));
   if (!path) {
     return JS::FinishLoadingImportedModuleFailedWithPendingException(cx,
@@ -486,9 +570,15 @@ JSObject* ModuleLoader::loadAndParse(JSContext* cx, HandleString pathArg,
     return nullptr;
   }
 
-  JS::ModuleType moduleType = JS::ModuleType::JavaScript;
-  if (moduleRequestArg) {
-    moduleType = moduleRequestArg->as<ModuleRequestObject>().moduleType();
+  JS::ModuleType moduleType =
+      moduleRequestArg->as<ModuleRequestObject>().moduleType();
+  if (moduleType == JS::ModuleType::Unknown ||
+      moduleType == JS::ModuleType::CSS) {
+    // We don't support CSS modules in the shell because we don't have access
+    // to a CSS parser in standalone shell builds.
+    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
+                              JSMSG_BAD_MODULE_TYPE);
+    return nullptr;
   }
 
   RootedObject module(cx);
@@ -505,12 +595,50 @@ JSObject* ModuleLoader::loadAndParse(JSContext* cx, HandleString pathArg,
     return nullptr;
   }
 
+  if (moduleType == JS::ModuleType::Bytes) {
+    RootedString resolvedPath(cx, ResolvePath(cx, path, RootRelative));
+    if (!resolvedPath) {
+      return nullptr;
+    }
+
+    auto* typedArray = FileAsImmutableTypedArray(cx, resolvedPath);
+    if (!typedArray) {
+      return nullptr;
+    }
+    JS::Rooted<JS::Value> defaultExport(cx, ObjectValue(*typedArray));
+
+    module = JS::CreateDefaultExportSyntheticModule(cx, defaultExport);
+    if (!module) {
+      return nullptr;
+    }
+
+    if (!addModuleToRegistry(cx, moduleType, path, module)) {
+      return nullptr;
+    }
+
+    return module;
+  }
+
   JS::CompileOptions options(cx);
   options.setFileAndLine(filename.get(), 1);
 
   RootedString source(cx, fetchSource(cx, path));
   if (!source) {
     return nullptr;
+  }
+
+  if (moduleType == JS::ModuleType::Text) {
+    JS::RootedValue defaultExport(cx, JS::StringValue(source));
+    module = JS::CreateDefaultExportSyntheticModule(cx, defaultExport);
+    if (!module) {
+      return nullptr;
+    }
+
+    if (!addModuleToRegistry(cx, moduleType, path, module)) {
+      return nullptr;
+    }
+
+    return module;
   }
 
   JS::AutoStableStringChars linearChars(cx);
@@ -523,37 +651,24 @@ JSObject* ModuleLoader::loadAndParse(JSContext* cx, HandleString pathArg,
     return nullptr;
   }
 
-  switch (moduleType) {
-    case JS::ModuleType::Unknown:
-    case JS::ModuleType::Bytes:
-      JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
-                                JSMSG_BAD_MODULE_TYPE);
+  if (moduleType == JS::ModuleType::JavaScript) {
+    module = JS::CompileModule(cx, options, srcBuf);
+    if (!module) {
       return nullptr;
-    case JS::ModuleType::JavaScript: {
-      module = JS::CompileModule(cx, options, srcBuf);
-      if (!module) {
-        return nullptr;
-      }
+    }
 
-      RootedObject info(cx, js::CreateScriptPrivate(cx, path));
-      if (!info) {
-        return nullptr;
-      }
-
-      JS::SetModulePrivate(module, ObjectValue(*info));
-    } break;
-    case JS::ModuleType::JSON:
-      module = JS::CompileJsonModule(cx, options, srcBuf);
-      if (!module) {
-        return nullptr;
-      }
-      break;
-    case JS::ModuleType::CSS:
-      // We don't support CSS modules in the shell because we don't have access
-      // to a CSS parser in standalone shell builds.
-      JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
-                                JSMSG_BAD_MODULE_TYPE);
+    RootedObject info(cx, js::CreateScriptPrivate(cx, path));
+    if (!info) {
       return nullptr;
+    }
+
+    JS::SetModulePrivate(module, ObjectValue(*info));
+  } else {
+    MOZ_ASSERT(moduleType == JS::ModuleType::JSON);
+    module = JS::CompileJsonModule(cx, options, srcBuf);
+    if (!module) {
+      return nullptr;
+    }
   }
 
   if (!addModuleToRegistry(cx, moduleType, path, module)) {

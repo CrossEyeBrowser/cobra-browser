@@ -5,7 +5,6 @@
 #ifndef PEER_CONNECTION_IMPL_H_
 #define PEER_CONNECTION_IMPL_H_
 
-#include <cmath>
 #include <map>
 #include <string>
 #include <vector>
@@ -224,6 +223,7 @@ class PeerConnectionImpl final
                                dom::RTCIceGathererState state);
   void OnCandidateFound(const std::string& aTransportId,
                         const CandidateInfo& aCandidateInfo);
+  void OnCandidateError(const IceCandidateErrorInfo& aErrorInfo);
   void UpdateDefaultCandidate(const std::string& defaultAddr,
                               uint16_t defaultPort,
                               const std::string& defaultRtcpAddr,
@@ -926,6 +926,7 @@ class PeerConnectionImpl final
   MediaEventListener mGatheringStateChangeListener;
   MediaEventListener mConnectionStateChangeListener;
   MediaEventListener mCandidateListener;
+  MediaEventListener mCandidateErrorListener;
   MediaEventListener mAlpnNegotiatedListener;
   MediaEventListener mStateChangeListener;
   MediaEventListener mRtcpStateChangeListener;

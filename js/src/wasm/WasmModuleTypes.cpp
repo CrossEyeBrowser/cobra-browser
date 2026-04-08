@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2015 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +16,8 @@
 
 #include "wasm/WasmModuleTypes.h"
 
+#include <bit>
+
 #include "vm/JSAtomUtils.h"  // AtomizeUTF8Chars
 #include "vm/MallocProvider.h"
 #include "wasm/WasmUtility.h"
@@ -34,7 +34,7 @@ using mozilla::MallocSizeOf;
 // TagLayout
 
 static CheckedInt32 RoundUpToAlignment(CheckedInt32 address, uint32_t align) {
-  MOZ_ASSERT(mozilla::IsPowerOfTwo(align));
+  MOZ_ASSERT(std::has_single_bit(align));
 
   // Note: Be careful to order operators such that we first make the
   // value smaller and then larger, so that we don't get false

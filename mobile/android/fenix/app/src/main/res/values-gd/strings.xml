@@ -372,6 +372,8 @@
     %2$s is the name of the language which the page was translated to. (For example: French)
   -->
   <string name="browser_toolbar_translated_successfully">Chaidh %2$s a chur air an duilleag (%1$s o thùs).</string>
+  <!-- CFR description for the browser toolbar describing the "Shake to summarize feature" -->
+  <string name="browser_toolbar_summarize_cfr_description">Crath an t-uidheam agad is faigh geàrr-chunntas air an duilleag seo ann am priobadh na sùla. ⚡️</string>
   <!--
     Translation Toolbar
 
@@ -942,6 +944,8 @@
   <string name="preferences_show_nonsponsored_suggestions">Molaidhean o %1$s</string>
   <!-- Summary for preference to show Firefox Suggest search suggestions for web content -->
   <string name="preferences_show_nonsponsored_suggestions_summary">Faigh molaidhean on lìon co-cheangailte ris na lorg thu</string>
+  <!-- Preference title for switch preference to show search optimization cards -->
+  <string name="preferences_show_search_optimization_cards">Faigh molaidhean o Mozilla ’s tu a’ sgrìobhadh</string>
   <!-- Preference for link sharing -->
   <string name="preferences_link_sharing">Co-roinneadh cheanglaichean</string>
   <!-- Title for the link sharing toggle. %1$s is replaced by the brand name (e.g. Firefox). -->
@@ -1032,8 +1036,10 @@
   <!--
     Customize Home
 
-    Header text for jumping back into the recent tab in customize the home screen
+    Title for the customize home screen section with privacy report.
   -->
+  <string name="customize_toggle_privacy_report">Aithisg na prìobhaideachd</string>
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Till gu far an robh thu</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Comharran-lìn</string>
@@ -1499,12 +1505,8 @@
   <string name="studies_remove">Thoir air falbh</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Gnìomhach</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Feuch gleusan ùra mus fhaigh càch cothrom orra.</string>
   <!-- Description for studies. Note: The word "Firefox" should NOT be translated -->
   <string name="studies_description_4" tools:ignore="BrandUsage">Taghaidh Firefox cleachdaichean air thuaiream is bheir e dhaibh cothrom gleusan a chur fo dheuchainn, rud a nì e nas fheàrr dhan a h-uile duine.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Stàlaich is ruith obair-rannsachaidh</string>
   <!-- Title of the Studies data preference -->
   <string name="studies_title_2">Ceadaich obair-rannsachaidh air gleusan</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
@@ -1592,6 +1594,8 @@
   <string name="tab_manager_multiselect_menu_item_share">Co-roinn</string>
   <!-- Text shown in the multiselect menu for adding selected tabs to collections. -->
   <string name="tab_manager_multiselect_menu_item_add_to_collection">Cuir ri cruinneachadh</string>
+  <!-- Text shown in the multiselect menu for adding selected tabs to a tab group. -->
+  <string name="tab_manager_multiselect_menu_item_add_to_tab_group">Cuir ri buidheann</string>
   <!-- Content description for tabs tray multiselect share button -->
   <string name="tab_tray_multiselect_share_content_description" tools:ignore="UnusedResources" moz:removedIn="149">Co-roinn na tabaichean a thagh thu</string>
   <!-- Content description for tabs tray multiselect menu -->
@@ -1638,12 +1642,21 @@
     Title for the create tab group bottom sheet
   -->
   <string name="create_tab_group_title">Cruthaich buidheann thabaichean</string>
+  <!-- Title for the edit tab group bottom sheet -->
+  <string name="edit_tab_group_title">Deasaich am buidheann</string>
   <string name="create_tab_group_save_button">Sàbhail</string>
   <string name="edit_tab_group_bottom_sheet_close_content_description">Dùin deasachadh buidheann nan taba</string>
   <!-- Default tab group name when creating a tab group -->
-  <string name="create_tab_group_default_name">Buidheann</string>
-  <!-- Label for the tab group name field in the bottom sheet to create a new tab group. -->
+  <string name="create_tab_group_default_name" tools:ignore="UnusedResources" moz:removedIn="150">Buidheann</string>
+  <!--
+    Default tab group name when creating a tab group
+    %d is the number of existing tab groups + 1.
+  -->
+  <string name="create_tab_group_form_default_name">Buidheann %d</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
   <string name="create_tab_group_name_label">Ainm</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
+  <string name="tab_group_name_label" tools:ignore="UnusedResources" moz:removedIn="150">Ainm</string>
   <!--
     History
 
@@ -1978,7 +1991,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Deasaich</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Lethbhreac</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Lethbhreac</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Co-roinn</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -2034,12 +2047,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">Chaidh %1$s a sguabadh às</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">NEO-DHÈAN</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">NEO-DHÈAN</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">Chaidh %s a sguabadh às</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">Chaidh %s a sguabadh às</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Chaidh na nithean a sguabadh às, %s dhiubh</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Chaidh na nithean a sguabadh às, %s dhiubh</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Air ais</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Cuir pasgan ùr ris</string>
@@ -2308,23 +2325,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Cleachd Firefox mar am brabhsair bunaiteach agad</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Feuch am brabhsadh prìobhaideach</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Feuch am brabhsadh prìobhaideach</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Dèan brabhsadh gun bhriosgaid no eachdraidh sam bith a shàbhaladh ann am %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Dèan brabhsadh gun bhriosgaid no eachdraidh sam bith a shàbhaladh ann am %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Dèan brabhsadh gun lorg fhàgail</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Dèan brabhsadh gun lorg fhàgail</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">Ma nì thu brabhsadh prìobhaideach, cha sàbhail %1$s am fiosrachadh agad.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">Ma nì thu brabhsadh prìobhaideach, cha sàbhail %1$s am fiosrachadh agad.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Tòisich air rudan a lorg</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Tòisich air rudan a lorg</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Lorg rud-eigin am fagas. No faigh lorg air rud-eigin spòrsail.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Lorg rud-eigin am fagas. No faigh lorg air rud-eigin spòrsail.</string>
   <!--
     Survey
 
@@ -2377,8 +2394,6 @@
   <string name="preference_accessibility_text_size_summary">Dèan an teacsa air làraichean-lìn nas motha no nas lugha</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Meud a’ chrutha-chlò</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Ath-mheudachadh fèin-obrachail a’ chrutha-chlò</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2500,6 +2515,19 @@
   <string name="preference_enhanced_tracking_protection_explanation_2">Dìonaidh %s thu o mhòran dhe na tracaichean as cumanta a leanas mun cuairt thu air an lìon.</string>
   <!-- Text displayed that links to website about enhanced tracking protection -->
   <string name="preference_enhanced_tracking_protection_explanation_learn_more">Barrachd fiosrachaidh</string>
+  <plurals name="trackers_blocked_count">
+    <!--
+      Trackers blocked card on homepage
+
+      Text shown on the trackers blocked card. %d is the number of trackers blocked.
+    -->
+    <item quantity="one">%d tracaiche air a bhacadh</item>
+    <item quantity="two">%d thracaiche air a bhacadh</item>
+    <item quantity="few">%d tracaichean air am bacadh</item>
+    <item quantity="other">%d tracaiche air am bacadh</item>
+  </plurals>
+  <!-- Text shown on the trackers blocked card when no trackers have been blocked yet -->
+  <string name="trackers_blocked_empty">Tha thu fo dhìon</string>
   <!-- Preference for enhanced tracking protection for the standard protection settings -->
   <string name="preference_enhanced_tracking_protection_standard_default_1">Stannardach (bun-roghainn)</string>
   <!-- Preference description for enhanced tracking protection for the standard protection settings -->
@@ -3402,7 +3430,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">Cha b’ urrainn dhuinn na cànain a luchdadh. Dèan cinnteach gu bheil ceangal ris an eadar-lìon is feuch ris a-rithist an uair sin.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">Tha sinn duilich ach chan eil taic againn dhan chànan seo (%1$s) fhathast.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">Tha sinn duilich ach chan eil taic againn dhan chànan seo (%1$s) fhathast.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">’Ga eadar-theangachadh…</string>
   <!--
@@ -3726,6 +3754,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Cuir ris na tabaichean prìobhaideach</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 
@@ -3764,6 +3794,16 @@
   <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">Cha dèan mi lorg ann am Firefox</string>
   <!-- Option for likert scale -->
   <string name="likert_scale_option_8" tools:ignore="UnusedResources">Cha chleachd mi gleus an t-sioncronachaidh</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_slow_or_buggy" tools:ignore="UnusedResources">Tha e slaodach no mearachdach</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_features_hard_to_find_or_missing" tools:ignore="UnusedResources">Tha na gleusan doirbh ri lorg no a dhìth</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_confusing_or_hard_to_use" tools:ignore="UnusedResources">Tha e tro chèile no doiribh ri chleachdadh</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_its_okay" tools:ignore="UnusedResources">Tha e ceart gu leòr ach chan eil e nas fheàrr na brabhsairean eile</string>
+  <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+  <string name="likert_scale_option_i_plan_to_keep_using" tools:ignore="BrandUsage,UnusedResources">Tha mi am beachd Firefox a chumail</string>
   <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">Cuidich leinn a’ leasachadh clò-bhualadh ann am Firefox. Cha doir e ach mionaid.</string>
   <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
@@ -3778,6 +3818,8 @@
   <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Dè cho riaraichte ’s a tha thu leis a’ ghleus luirg ùr ann am Firefox?</string>
   <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">Dè cho riaraichte ’s a tha thu le gleus an t-sioncronachaidh ann am Firefox?</string>
+  <!-- Text shown in the survey title for 'describe your experience so far' microsurvey. Note: The word "Firefox" should NOT be translated. -->
+  <string name="microsurvey_describe_your_experience_title" tools:ignore="BrandUsage,UnusedResources">Cuidich leinn le bhith a’ toirt piseach air Firefox. Ciamar a dh’èirich leat leis gu ruige seo?</string>
   <!--
     Accessibility
 

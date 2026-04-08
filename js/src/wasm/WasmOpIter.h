@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2016 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -146,6 +144,8 @@ enum class OpKind {
   Nop,
   Unary,
   Binary,
+  BinaryI128,
+  BinaryI64Wide,
   Ternary,
   Comparison,
   Conversion,
@@ -612,7 +612,9 @@ class MOZ_STACK_CLASS OpIter : private Policy {
     }
 
     // No hint found for this branch.
-    if (lastBranchHintIndex_ >= branchHintVector_->length()) {
+    if (lastBranchHintIndex_ >= branchHintVector_->length() ||
+        (*branchHintVector_)[lastBranchHintIndex_].branchOffset !=
+            branchOffset) {
       return BranchHint::Invalid;
     }
 
@@ -682,6 +684,11 @@ class MOZ_STACK_CLASS OpIter : private Policy {
                                     Value* rhs);
   [[nodiscard]] bool readTernary(ValType operandType, Value* v0, Value* v1,
                                  Value* v2);
+
+  [[nodiscard]] bool readBinaryI128(Value* lhsLo, Value* lhsHi, Value* rhsLo,
+                                    Value* rhsHi);
+  [[nodiscard]] bool readBinaryI64Wide(Value* lhs, Value* rhs);
+
   [[nodiscard]] bool readLoad(ValType resultType, uint32_t byteSize,
                               LinearMemoryAddress<Value>* addr);
   [[nodiscard]] bool readStore(ValType resultType, uint32_t byteSize,
@@ -1966,6 +1973,45 @@ inline bool OpIter<Policy>::readTernary(ValType operandType, Value* v0,
   infalliblePush(operandType);
 
   return true;
+}
+
+template <typename Policy>
+inline bool OpIter<Policy>::readBinaryI128(Value* lhsLo, Value* lhsHi,
+                                           Value* rhsLo, Value* rhsHi) {
+  MOZ_ASSERT(Classify(op_) == OpKind::BinaryI128);
+
+  if (!popWithType(ValType::I64, rhsHi)) {
+    return false;
+  }
+  if (!popWithType(ValType::I64, rhsLo)) {
+    return false;
+  }
+
+  if (!popWithType(ValType::I64, lhsHi)) {
+    return false;
+  }
+  if (!popWithType(ValType::I64, lhsLo)) {
+    return false;
+  }
+
+  infalliblePush(ValType::I64);
+  return push(ValType::I64);
+}
+
+template <typename Policy>
+inline bool OpIter<Policy>::readBinaryI64Wide(Value* lhs, Value* rhs) {
+  MOZ_ASSERT(Classify(op_) == OpKind::BinaryI64Wide);
+
+  if (!popWithType(ValType::I64, rhs)) {
+    return false;
+  }
+
+  if (!popWithType(ValType::I64, lhs)) {
+    return false;
+  }
+
+  infalliblePush(ValType::I64);
+  return push(ValType::I64);
 }
 
 template <typename Policy>

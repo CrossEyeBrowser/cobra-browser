@@ -257,6 +257,27 @@ export class PrefsFeed {
         .setStringPref("weather.display", valueObj.weather.display);
     }
 
+    // Write topSitesRows to the default branch to enable experiments with
+    // the default row count without overriding an explicit user choice.
+    if (valueObj.topSites?.topSitesRows) {
+      Services.prefs
+        .getDefaultBranch(this._prefs._branchStr)
+        .setIntPref("topSitesRows", valueObj.topSites.topSitesRows);
+    }
+
+    // Write initialWallpaper to the user branch so it persists after the
+    // experiment ends. The guard prevents overwriting an existing value or a
+    // user's explicit wallpaper choice that has already cleared it.
+    if (
+      valueObj.wallpaper?.initialWallpaper &&
+      !this._prefs.get("newtabWallpapers.initialWallpaper")
+    ) {
+      this._prefs.set(
+        "newtabWallpapers.initialWallpaper",
+        valueObj.wallpaper.initialWallpaper
+      );
+    }
+
     return valueObj;
   }
 
@@ -317,6 +338,17 @@ export class PrefsFeed {
    */
   onPocketExperimentUpdated(event, reason) {
     const value = lazy.NimbusFeatures.pocketNewtab.getAllVariables() || {};
+
+    if (
+      value.currentWallpaper &&
+      !this._prefs.get("newtabWallpapers.initialWallpaper")
+    ) {
+      this._prefs.set(
+        "newtabWallpapers.initialWallpaper",
+        value.currentWallpaper
+      );
+    }
+
     // Loaded experiments are set up inside init()
     if (
       reason !== "feature-experiment-loaded" &&
@@ -492,6 +524,15 @@ export class PrefsFeed {
     values.featureConfig = lazy.NimbusFeatures.newtab.getAllVariables() || {};
     values.pocketConfig =
       lazy.NimbusFeatures.pocketNewtab.getAllVariables() || {};
+    if (
+      values.pocketConfig.currentWallpaper &&
+      !this._prefs.get("newtabWallpapers.initialWallpaper")
+    ) {
+      this._prefs.set(
+        "newtabWallpapers.initialWallpaper",
+        values.pocketConfig.currentWallpaper
+      );
+    }
     values.smartShortcutsConfig =
       lazy.NimbusFeatures.newtabSmartShortcuts.getAllVariables() || {};
     values.widgetsConfig =

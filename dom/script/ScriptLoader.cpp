@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -198,28 +196,12 @@ NS_IMPL_CYCLE_COLLECTING_ADDREF(ScriptLoader)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(ScriptLoader)
 
 ScriptLoader::ScriptLoader(Document* aDocument)
-    : mDocument(aDocument),
-      mParserBlockingBlockerCount(0),
-      mBlockerCount(0),
-      mNumberOfProcessors(0),
-      mTotalFullParseSize(0),
-      mPhysicalSizeOfMemory(-1),
-      mEnabled(true),
-      mDeferEnabled(false),
-      mSpeculativeOMTParsingEnabled(false),
-      mDeferCheckpointReached(false),
-      mBlockingDOMContentLoaded(false),
-      mLoadEventFired(false),
-      mGiveUpDiskCaching(false),
-      mContinueParsingDocumentAfterCurrentScript(false),
-      mHadFCPDoNotUseDirectly(false),
-      mReporter(new ConsoleReportCollector()) {
+    : mDocument(aDocument), mReporter(new ConsoleReportCollector()) {
   LOG(("ScriptLoader::ScriptLoader %p", this));
 
   mSpeculativeOMTParsingEnabled = StaticPrefs::
       dom_script_loader_external_scripts_speculative_omt_parse_enabled();
 
-#ifdef NIGHTLY_BUILD
   // NOTE: The loader for the system principal aren't supposed to
   //       load remote contents, and it doesn't have to use the in-memory cache.
   //       A non-system-principal document can also load internal resources,
@@ -231,7 +213,6 @@ ScriptLoader::ScriptLoader(Document* aDocument)
     RegisterToCache();
     LOG(("ScriptLoader (%p): Using in-memory cache.", this));
   }
-#endif
 
   mShutdownObserver = new AsyncCompileShutdownObserver(this);
   nsContentUtils::RegisterShutdownObserver(mShutdownObserver);
@@ -395,6 +376,19 @@ static void CollectScriptTelemetry(ScriptLoadRequest* aRequest) {
   }
 }
 
+static void AddMemoryCacheRefCountTelemetry(
+    JS::loader::LoadedScript* aLoadedScript) {
+  using namespace mozilla::glean::dom;
+
+  // Skip this function if we are not running telemetry.
+  if (!mozilla::Telemetry::CanRecordExtended()) {
+    return;
+  }
+
+  uint16_t count = aLoadedScript->ClampedRefCountForTelemetry();
+  script_memory_cache_ref_count.AccumulateSingleSample(count);
+}
+
 // Helper method for checking if the script element is an event-handler
 // This means that it has both a for-attribute and a event-attribute.
 // Also, if the for-attribute has a value that matches "\s*window\s*",
@@ -450,6 +444,7 @@ nsContentPolicyType ScriptLoadRequestToContentPolicyType(
         case JS::ModuleType::CSS:
           return nsIContentPolicy::TYPE_INTERNAL_STYLESHEET_PRELOAD;
         case JS::ModuleType::Bytes:
+        case JS::ModuleType::Text:
         case JS::ModuleType::Unknown:
           MOZ_ASSERT_UNREACHABLE("Unknown module type");
       }
@@ -462,6 +457,7 @@ nsContentPolicyType ScriptLoadRequestToContentPolicyType(
     switch (aRequest->AsModuleRequest()->mModuleType) {
       case JS::ModuleType::Unknown:
       case JS::ModuleType::Bytes:
+      case JS::ModuleType::Text:
         MOZ_CRASH("Unexpected module type");
       case JS::ModuleType::JavaScript:
         return nsIContentPolicy::TYPE_INTERNAL_MODULE;
@@ -1277,10 +1273,15 @@ void ScriptLoader::TryUseCache(ReferrerPolicy aReferrerPolicy,
   aRequest->mNetworkMetadata = cacheResult.mNetworkMetadata;
 
   MOZ_ASSERT(cacheResult.mCompleteValue->ReferrerPolicy() == aReferrerPolicy);
-  MOZ_ASSERT(aFetchOptions->IsCompatible(
-      cacheResult.mCompleteValue->GetFetchOptions()));
 
-  aRequest->CacheEntryFound(cacheResult.mCompleteValue);
+  mMemoryCacheUsed++;
+  if (!cacheResult.mCompleteValue->IsEverHitFromMemoryCache()) {
+    cacheResult.mCompleteValue->SetIsEverHitFromMemoryCache();
+    mCache->OnEntryEverHit();
+  }
+  AddMemoryCacheRefCountTelemetry(cacheResult.mCompleteValue);
+
+  aRequest->CacheEntryFound(cacheResult.mCompleteValue, aFetchOptions);
   LOG(
       ("ScriptLoader (%p): Found in-memory cache LoadedScript (%p) for "
        "ScriptLoadRequest(%p) %s.",
@@ -1382,7 +1383,7 @@ bool ScriptLoader::ProcessExternalScript(nsIScriptElement* aElement,
                           &nsIScriptElement::FireErrorEvent));
     nsContentUtils::ReportToConsole(
         nsIScriptError::warningFlag, "Script Loader"_ns, mDocument,
-        nsContentUtils::eDOM_PROPERTIES, "ImportMapExternalNotSupported");
+        PropertiesFile::DOM_PROPERTIES, "ImportMapExternalNotSupported");
     return false;
   }
 
@@ -1678,7 +1679,7 @@ bool ScriptLoader::ProcessInlineScript(nsIScriptElement* aElement,
                             : "ImportMapNotAllowedAfterModuleLoad";
       nsContentUtils::ReportToConsole(nsIScriptError::warningFlag,
                                       "Script Loader"_ns, mDocument,
-                                      nsContentUtils::eDOM_PROPERTIES, msg);
+                                      PropertiesFile::DOM_PROPERTIES, msg);
       NS_DispatchToCurrentThread(
           NewRunnableMethod("nsIScriptElement::FireErrorEvent", aElement,
                             &nsIScriptElement::FireErrorEvent));
@@ -3521,6 +3522,7 @@ void ScriptLoader::TryCacheRequest(ScriptLoadRequest* aRequest) {
       loadedScript->mFetchCount = 1;
     }
     mCache->Insert(*loadData);
+    mCache->OnEntryInserted();
     LOG(("ScriptLoader (%p): Inserting in-memory cache for %s.", this,
          aRequest->URI()->GetSpecOrDefault().get()));
     TRACE_FOR_TEST(aRequest, "memorycache:saved");
@@ -3738,6 +3740,10 @@ void ScriptLoader::LoadEventFired() {
 }
 
 void ScriptLoader::Destroy() {
+  if (mCache) {
+    mCache->UpdateEverHitTelemetry();
+  }
+
   if (mShutdownObserver) {
     mShutdownObserver->Unregister();
     mShutdownObserver = nullptr;
@@ -4351,9 +4357,11 @@ nsresult ScriptLoader::OnStreamComplete(
             cacheResult.mCompleteValue->AddFetchCount();
 
             TRACE_FOR_TEST(aRequest, "memorycache:dirty:revived");
+            mMemoryCacheRevived++;
           } else {
             mCache->Evict(key);
             TRACE_FOR_TEST(aRequest, "memorycache:dirty:evicted");
+            mMemoryCacheEvictedDirty++;
           }
         }
 
@@ -4381,6 +4389,14 @@ nsresult ScriptLoader::OnStreamComplete(
         rv = SaveSRIHash(aRequest, aSRIDataVerifier);
       }
     }
+
+    if (aRequest->IsTextSource()) {
+      mLoadedFromNeckoAsText++;
+    } else if (aRequest->IsSerializedStencil()) {
+      mLoadedFromNeckoAsSerializedStencil++;
+    }
+    // NOTE: aRequest->IsCachedStencil() case is handled above by incrementing
+    //       mMemoryCacheRevived.
 
     if (NS_SUCCEEDED(rv)) {
       rv = PrepareLoadedRequest(aRequest, aChannel, aChannelStatus);
@@ -4536,7 +4552,7 @@ void ScriptLoader::ReportErrorToConsole(ScriptLoadRequest* aRequest,
 
   nsContentUtils::ReportToConsole(
       nsIScriptError::warningFlag, "Script Loader"_ns, mDocument,
-      nsContentUtils::eDOM_PROPERTIES, message, params, loc.ref());
+      PropertiesFile::DOM_PROPERTIES, message, params, loc.ref());
 }
 
 void ScriptLoader::ReportWarningToConsole(
@@ -4550,7 +4566,7 @@ void ScriptLoader::ReportWarningToConsole(
       aRequest->GetScriptLoadContext()->GetScriptColumnNumber();
   nsContentUtils::ReportToConsole(
       nsIScriptError::warningFlag, "Script Loader"_ns, mDocument,
-      nsContentUtils::eDOM_PROPERTIES, aMessageName, aParams,
+      PropertiesFile::DOM_PROPERTIES, aMessageName, aParams,
       SourceLocation{mDocument->GetDocumentURI(), lineNo,
                      columnNo.oneOriginValue()});
 }
@@ -4816,6 +4832,7 @@ static bool MimeTypeMatchesExpectedModuleType(
       return nsContentUtils::HasCssMimeTypeEssence(typeString);
     case JS::ModuleType::Unknown:
     case JS::ModuleType::Bytes:
+    case JS::ModuleType::Text:
       break;
   }
 

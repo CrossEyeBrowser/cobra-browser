@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -181,13 +180,11 @@ static bool MustBeGenericAccessible(nsIContent* aContent,
   }
   nsIFrame* frame = aContent->GetPrimaryFrame();
   MOZ_ASSERT(frame);
-  nsAutoCString overflow;
-  frame->Style()->GetComputedPropertyValue(eCSSProperty_overflow, overflow);
   // If the frame has been transformed, and the content has any children, we
   // should create an Accessible so that we can account for the transform when
   // calculating the Accessible's bounds using the parent process cache.
   // Ditto for content which is position: fixed or sticky or has overflow
-  // styling (auto, scroll, hidden).
+  // styling (auto, scroll, hidden, or any multi-axis combination).
   // However, don't do this for XUL widgets, as this breaks XUL a11y code
   // expectations in some cases. XUL widgets are only used in the parent
   // process and can't be cached anyway.
@@ -196,8 +193,7 @@ static bool MustBeGenericAccessible(nsIContent* aContent,
           frame->IsStickyPositioned() ||
           (frame->StyleDisplay()->mPosition == StylePositionProperty::Fixed &&
            nsLayoutUtils::IsReallyFixedPos(frame)) ||
-          overflow.Equals("auto"_ns) || overflow.Equals("scroll"_ns) ||
-          overflow.Equals("hidden"_ns));
+          frame->StyleDisplay()->IsScrollableOverflow());
 }
 
 /**
@@ -891,8 +887,8 @@ void nsAccessibilityService::ComboboxValueChanged(nsIContent* aSelect) {
   if (!document) {
     return;
   }
-  if (LocalAccessible* accessible = document->GetAccessible(aSelect)) {
-    MOZ_ASSERT(accessible->IsCombobox());
+  if (LocalAccessible* accessible = document->GetAccessible(aSelect);
+      accessible && accessible->IsCombobox()) {
     document->FireDelayedEvent(nsIAccessibleEvent::EVENT_TEXT_VALUE_CHANGE,
                                accessible);
   }
@@ -1632,7 +1628,7 @@ LocalAccessible* nsAccessibilityService::CreateAccessible(
 #  include "mozilla/Monitor.h"
 #  include "mozilla/Maybe.h"
 
-static Maybe<Monitor> sAndroidMonitor;
+constinit static Maybe<Monitor> sAndroidMonitor;
 
 mozilla::Monitor& nsAccessibilityService::GetAndroidMonitor() {
   if (!sAndroidMonitor.isSome()) {
@@ -1678,17 +1674,15 @@ bool nsAccessibilityService::Init(uint64_t aCacheDomains) {
 
   eventListenerService->AddListenerChangeListener(this);
 
-  for (uint32_t i = 0; i < std::size(sHTMLMarkupMapList); i++) {
-    mHTMLMarkupMap.InsertOrUpdate(sHTMLMarkupMapList[i].tag,
-                                  &sHTMLMarkupMapList[i]);
+  for (const auto& info : sHTMLMarkupMapList) {
+    mHTMLMarkupMap.InsertOrUpdate(info.tag, &info);
   }
   for (const auto& info : sMathMLMarkupMapList) {
     mMathMLMarkupMap.InsertOrUpdate(info.tag, &info);
   }
 
-  for (uint32_t i = 0; i < std::size(sXULMarkupMapList); i++) {
-    mXULMarkupMap.InsertOrUpdate(sXULMarkupMapList[i].tag,
-                                 &sXULMarkupMapList[i]);
+  for (const auto& info : sXULMarkupMapList) {
+    mXULMarkupMap.InsertOrUpdate(info.tag, &info);
   }
 
 #ifdef A11Y_LOG
@@ -1718,11 +1712,11 @@ bool nsAccessibilityService::Init(uint64_t aCacheDomains) {
   if (XRE_IsParentProcess() &&
       StaticPrefs::accessibility_enable_all_cache_domains_AtStartup()) {
     gCacheDomains = CacheDomain::All;
+  } else {
+    // Set the active accessibility cache domains. We might want to modify the
+    // domains that we activate based on information about the instantiator.
+    gCacheDomains = ::GetCacheDomainsForKnownClients(aCacheDomains);
   }
-
-  // Set the active accessibility cache domains. We might want to modify the
-  // domains that we activate based on information about the instantiator.
-  gCacheDomains = ::GetCacheDomainsForKnownClients(aCacheDomains);
 
   static const char16_t kInitIndicator[] = {'1', 0};
   observerService->NotifyObservers(nullptr, "a11y-init-or-shutdown",

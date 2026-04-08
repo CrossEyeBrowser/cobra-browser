@@ -644,10 +644,11 @@
             Services.prefs.getIntPref("browser.tabs.maxOpenBeforeWarn")
           ) {
             // Sync dialog cannot be used inside drop event handler.
-            let answer = await OpenInTabsUtils.promiseConfirmOpenInTabs(
-              urls.length,
-              window
-            );
+            let answer =
+              await gBrowser.OpenInTabsUtils.promiseConfirmOpenInTabs(
+                urls.length,
+                window
+              );
             if (!answer) {
               return;
             }
@@ -961,11 +962,17 @@
      */
     #getHorizontalScrollboxDragTarget(event, ignoreSides) {
       function isWithinBounds(el) {
-        let { width } = window.windowUtils.getBoundsWithoutFlushing(el);
+        let { width, height } = window.windowUtils.getBoundsWithoutFlushing(el);
+        const startY = el.screenY;
+        const endY = el.screenY + height;
         const offset = ignoreSides ? width * 0.25 : 0;
         const startX = el.screenX + offset;
         const endX = el.screenX + width - offset;
-        return startX <= event.screenX && event.screenX <= endX;
+        const xBoundsPass = startX <= event.screenX && event.screenX <= endX;
+        const yBoundsPass = startY <= event.screenY && event.screenY <= endY;
+        return event.type === "dragstart"
+          ? xBoundsPass && yBoundsPass
+          : xBoundsPass;
       }
       return this._tabbrowserTabs.dragAndDropElements.find(isWithinBounds);
     }

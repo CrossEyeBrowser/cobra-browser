@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -864,6 +862,9 @@ class BrowserParent final : public PBrowserParent,
   // way that potentially invalidates the sFocus.
   static void UpdateFocusFromBrowsingContext();
 
+  mozilla::ipc::IPCResult RecvPerformHapticFeedback(
+      mozilla::HapticFeedbackType aType);
+
  private:
   TabId mTabId;
 
@@ -921,6 +922,7 @@ class BrowserParent final : public PBrowserParent,
   float mDPI;
   int32_t mRounding;
   CSSToLayoutDeviceScale mDefaultScale;
+  DesktopToLayoutDeviceScale mDesktopToDeviceScale;
   bool mUpdatedDimensions;
   nsSizeMode mSizeMode;
   LayoutDeviceIntPoint mClientOffset;

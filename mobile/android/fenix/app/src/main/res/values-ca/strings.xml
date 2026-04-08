@@ -930,11 +930,7 @@
   <string name="customize_addon_collection_user_hint">Propietari de la col·lecció (identificador d’usuari)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">S’ha modificat la col·lecció d’extensions. L’aplicació es tancarà per aplicar els canvis…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Torneu a la pestanya</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Adreces d’interès</string>
@@ -1394,10 +1390,6 @@
   <string name="studies_remove">Elimina</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Actius</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Proveu funcions i idees abans que estiguin disponibles per a tothom.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Instal·la i executa estudis</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
   <string name="studies_learn_more">Més informació</string>
   <!--
@@ -1789,7 +1781,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Edita</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Copia</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Copia</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Comparteix</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -1845,12 +1837,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">S’ha suprimit %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">DESFÉS</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">DESFÉS</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">S’ha suprimit %s</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">S’ha suprimit %s</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Elements suprimits: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Elements suprimits: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Vés enrere</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Crea una carpeta</string>
@@ -2111,23 +2107,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Fes que el Firefox sigui el navegador per defecte</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Proveu la navegació privada</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Proveu la navegació privada</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Navegueu sense desar cap galeta ni historial en el %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Navegueu sense desar cap galeta ni historial en el %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Navegueu sense deixar rastre</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Navegueu sense deixar rastre</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">La navegació privada en el %1$s no desa informació vostra.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">La navegació privada en el %1$s no desa informació vostra.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Feu la primera cerca</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Feu la primera cerca</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Trobeu alguna cosa a prop. O descobriu alguna cosa divertida.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Trobeu alguna cosa a prop. O descobriu alguna cosa divertida.</string>
   <!--
     Survey
 
@@ -2180,8 +2176,6 @@
   <string name="preference_accessibility_text_size_summary">Augmenteu o disminuïu la mida del text dels llocs web</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Mida de la lletra</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Mida de la lletra automàtica</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -3169,7 +3163,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">No s’han pogut carregar les llengües. Comproveu la connexió a Internet i torneu-ho a provar.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">Malauradament, encara no s’admet %1$s.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">Malauradament, encara no s’admet %1$s.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">S’està traduint…</string>
   <!--
@@ -3486,6 +3480,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Afegeix a les pestanyes privades</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 

@@ -99,7 +99,7 @@ pub fn map_built_in(
         "vertex_index" => crate::BuiltIn::VertexIndex,
         "instance_index" => crate::BuiltIn::InstanceIndex,
         "view_index" => crate::BuiltIn::ViewIndex,
-        "clip_distances" => crate::BuiltIn::ClipDistance,
+        "clip_distances" => crate::BuiltIn::ClipDistances,
         // fragment
         "front_facing" => crate::BuiltIn::FrontFacing,
         "frag_depth" => crate::BuiltIn::FragDepth,
@@ -148,20 +148,14 @@ pub fn map_built_in(
         _ => return Err(Box::new(Error::UnknownBuiltin(span))),
     };
     match built_in {
-        crate::BuiltIn::ClipDistance => {
+        crate::BuiltIn::ClipDistances => {
             enable_extensions.require(ImplementedEnableExtension::ClipDistances, span)?
         }
-
         crate::BuiltIn::PrimitiveIndex => {
             enable_extensions.require(ImplementedEnableExtension::PrimitiveIndex, span)?
         }
         crate::BuiltIn::DrawIndex => {
-            if !enable_extensions.contains(ImplementedEnableExtension::DrawIndex) {
-                return Err(Box::new(Error::EnableExtensionNotEnabled {
-                    span,
-                    kind: ImplementedEnableExtension::DrawIndex.into(),
-                }));
-            }
+            enable_extensions.require(ImplementedEnableExtension::DrawIndex, span)?
         }
         crate::BuiltIn::CullPrimitive
         | crate::BuiltIn::PointIndex

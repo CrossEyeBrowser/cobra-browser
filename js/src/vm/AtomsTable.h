@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -141,9 +139,9 @@ class FrozenAtomSet {
     return mSet->shallowSizeOfIncludingThis(mallocSizeOf);
   }
 
-  using Range = AtomSet::Range;
+  using Iterator = AtomSet::Iterator;
 
-  AtomSet::Range all() const { return mSet->all(); }
+  AtomSet::Iterator iter() const { return mSet->iter(); }
 };
 
 class AtomsTable {
@@ -162,7 +160,7 @@ class AtomsTable {
 
  public:
   // An iterator used for sweeping atoms incrementally.
-  using SweepIterator = AtomSet::Enum;
+  using SweepIterator = AtomSet::ModIterator;
 
   AtomsTable();
   ~AtomsTable();

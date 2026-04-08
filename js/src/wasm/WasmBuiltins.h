@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2017 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,6 +69,8 @@ enum class SymbolicAddress {
   LogD,
   PowD,
   ATan2D,
+  AddSubI128,
+  MulI64Wide,
   ArrayMemMove,
   ArrayRefsMove,
   HandleDebugTrap,
@@ -240,6 +240,8 @@ extern const SymbolicAddressSignature SASigExpD;
 extern const SymbolicAddressSignature SASigLogD;
 extern const SymbolicAddressSignature SASigPowD;
 extern const SymbolicAddressSignature SASigATan2D;
+extern const SymbolicAddressSignature SASigAddSubI128;
+extern const SymbolicAddressSignature SASigMulI64Wide;
 extern const SymbolicAddressSignature SASigArrayMemMove;
 extern const SymbolicAddressSignature SASigArrayRefsMove;
 extern const SymbolicAddressSignature SASigMemoryGrowM32;

@@ -2442,8 +2442,6 @@ class GeckoEngineSessionTest {
             altText,
             typeStr,
             srcUri,
-            // textContent =
-            null,
             // linkText =
             null,
         )
@@ -2622,6 +2620,41 @@ class GeckoEngineSessionTest {
 
         engineSession.toggleDesktopMode(false, reload = true)
         verify(engineSession, atLeastOnce()).reload()
+    }
+
+    @Test
+    fun `toggleDesktopMode should reload pageLoadingUrl after redirect sequence`() {
+        val initialUrl = "https://example.com"
+        val redirectedUrl = "https://redirected.com"
+        val engineSession = GeckoEngineSession(runtime, geckoSessionProvider = geckoSessionProvider)
+
+        captureDelegates()
+
+        progressDelegate.value.onPageStart(geckoSession, initialUrl)
+        navigationDelegate.value.onLocationChange(geckoSession, redirectedUrl, emptyList(), false)
+
+        engineSession.toggleDesktopMode(true, reload = true)
+        verify(geckoSession).load(
+            GeckoSession.Loader()
+                .uri(initialUrl)
+                .flags(LoadUrlFlags.LOAD_FLAGS_REPLACE_HISTORY),
+        )
+    }
+
+    @Test
+    fun `toggleDesktopMode should call reload when redirect location change has user gesture`() {
+        val initialUrl = "https://example.com"
+        val redirectedUrl = "https://redirected.com"
+        val engineSession = GeckoEngineSession(runtime, geckoSessionProvider = geckoSessionProvider)
+
+        captureDelegates()
+
+        progressDelegate.value.onPageStart(geckoSession, initialUrl)
+        navigationDelegate.value.onLocationChange(geckoSession, redirectedUrl, emptyList(), true)
+
+        engineSession.toggleDesktopMode(true, reload = true)
+        verify(geckoSession).reload(LoadUrlFlags.NONE)
+        verify(geckoSession, never()).load(any())
     }
 
     @Test

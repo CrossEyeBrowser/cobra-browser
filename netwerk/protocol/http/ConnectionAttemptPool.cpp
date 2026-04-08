@@ -1,4 +1,3 @@
-/* vim:set ts=4 sw=2 sts=2 et cin: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -128,7 +127,7 @@ bool ConnectionAttemptPool::FindConnToClaim(
     PendingTransactionInfo* pendingTransInfo) {
   nsHttpTransaction* trans = pendingTransInfo->Transaction();
   for (const auto& sock : mAttempts) {
-    if (sock->AcceptsTransaction(trans) && sock->Claim()) {
+    if (sock->AcceptsTransaction(trans) && sock->Claim(trans)) {
       pendingTransInfo->RememberConnectionAttempt(sock);
       // We've found a speculative connection or a connection that
       // is free to be used in the mAttempts list.
@@ -162,7 +161,7 @@ void ConnectionAttemptPool::TimeoutTick() {
     if (delta > maxConnectTime_ms) {
       LOG(("Force timeout of ConnectionAttempt to %p after %.2fms.\n",
            sock.get(), delta));
-      sock->CloseTransports(NS_ERROR_NET_TIMEOUT);
+      sock->OnTimeout();
     }
 
     // If this ConnectionAttempt hangs around for 5 seconds after we've

@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -282,8 +280,9 @@ nsIFrame* nsIContent::GetPrimaryFrame(mozilla::FlushType aType) {
     return nullptr;
   }
 
+  RefPtr<mozilla::PresShell> presShell = frame->PresShell();
   if (aType == mozilla::FlushType::Layout) {
-    frame->PresShell()->EnsureReflowIfFrameHasHiddenContent(frame);
+    presShell->EnsureReflowIfFrameHasHiddenContent(frame);
     frame = GetPrimaryFrame();
   }
 
@@ -450,7 +449,7 @@ void nsIContent::UpdateEditableState(bool aNotify) {
     }
   }
 
-  nsIContent* parent = GetParent();
+  nsINode* parent = GetParentNode();
   SetEditableFlag(parent && parent->HasFlag(NODE_IS_EDITABLE));
 }
 
@@ -499,6 +498,29 @@ int32_t Element::TabIndex() {
   return TabIndexDefault();
 }
 
+/* static */
+void Element::TraverseCustomElementRegistry(
+    Element* aElement, nsCycleCollectionTraversalCallback& aCb) {
+  if (aElement->GetCustomElementRegistryState() ==
+      CustomElementRegistryState::Scoped) {
+    RefPtr<CustomElementRegistry> registry =
+        CustomElementRegistry::GetScopedRegistry(*aElement);
+    if (registry) {
+      NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(aCb, "scoped CustomElementRegistry");
+      aCb.NoteXPCOMChild(registry.get());
+    }
+  }
+}
+
+/* static */
+void Element::UnlinkCustomElementRegistry(Element* aElement) {
+  if (aElement->GetCustomElementRegistryState() ==
+      CustomElementRegistryState::Scoped) {
+    CustomElementRegistry::RemoveScopedRegistry(*aElement);
+    aElement->SetCustomElementRegistryState(CustomElementRegistryState::Global);
+  }
+}
+
 void Element::Focus(const FocusOptions& aOptions, CallerType aCallerType,
                     ErrorResult& aError) {
   const RefPtr<nsFocusManager> fm = nsFocusManager::GetFocusManager();
@@ -536,6 +558,41 @@ void Element::SetShadowRoot(ShadowRoot* aShadowRoot) {
   MOZ_ASSERT(!aShadowRoot || !slots->mShadowRoot,
              "We shouldn't clear the shadow root without unbind first");
   slots->mShadowRoot = aShadowRoot;
+}
+
+void Element::SetCustomElementRegistry(
+    CustomElementRegistry* aCustomElementRegistry) {
+  MOZ_ASSERT(StaticPrefs::dom_scoped_custom_element_registries_enabled());
+  MOZ_ASSERT(!!aCustomElementRegistry,
+             "We shouldn't be setting a null custom element registry");
+  MOZ_ASSERT(
+      GetCustomElementRegistryState() != CustomElementRegistryState::Scoped,
+      "We shouldn't override an already assigned scoped registry");
+
+  if (aCustomElementRegistry->IsScoped()) {
+    SetCustomElementRegistryState(CustomElementRegistryState::Scoped);
+    CustomElementRegistry::SetScopedRegistry(*this, *aCustomElementRegistry);
+  } else {
+    SetCustomElementRegistryState(CustomElementRegistryState::Global);
+  }
+}
+
+/* https://dom.spec.whatwg.org/#element-custom-element-registry */
+CustomElementRegistry* Element::GetCustomElementRegistry() {
+  switch (GetCustomElementRegistryState()) {
+    case CustomElementRegistryState::Global:
+      return OwnerDoc()->GetEffectiveGlobalCustomElementRegistry();
+    case CustomElementRegistryState::Null:
+      return nullptr;
+    case CustomElementRegistryState::Scoped: {
+      RefPtr<CustomElementRegistry> registry =
+          CustomElementRegistry::GetScopedRegistry(*this);
+      MOZ_ASSERT(registry);
+      return registry;
+    }
+  }
+  MOZ_ASSERT_UNREACHABLE("Invalid CustomElementRegistryState");
+  return nullptr;
 }
 
 void Element::SetLastRememberedBSize(float aBSize) {
@@ -3031,7 +3088,7 @@ void Element::UnbindFromTree(UnbindContext& aContext) {
     // The element being removed is an ancestor of the fullscreen element,
     // exit fullscreen state.
     nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "DOM"_ns,
-                                    OwnerDoc(), nsContentUtils::eDOM_PROPERTIES,
+                                    OwnerDoc(), PropertiesFile::DOM_PROPERTIES,
                                     "RemovedFullscreenElement");
     // Fully exit fullscreen.
     Document::ExitFullscreenInDocTree(OwnerDoc());
@@ -3475,6 +3532,7 @@ bool Element::OnlyNotifySameValueSet(int32_t aNamespaceID, nsAtom* aName,
   }
 
   nsAutoScriptBlocker scriptBlocker;
+  OnAttrSetButNotChanged(aNamespaceID, aName, aValue, aNotify);
   MutationObservers::NotifyAttributeSetToCurrentValue(this, aNamespaceID,
                                                       aName);
   return true;
@@ -3582,7 +3640,6 @@ nsresult Element::SetAttrInternal(int32_t aNamespaceID, nsAtom* aName,
 
   if (OnlyNotifySameValueSet(aNamespaceID, aName, aPrefix, aValue, aNotify,
                              oldValue, &modType, &oldValueSet)) {
-    OnAttrSetButNotChanged(aNamespaceID, aName, aValue, aNotify);
     return NS_OK;
   }
 
@@ -3626,7 +3683,6 @@ nsresult Element::SetParsedAttr(int32_t aNamespaceID, nsAtom* aName,
     const nsAttrValueOrString value(aParsedValue);
     if (OnlyNotifySameValueSet(aNamespaceID, aName, aPrefix, value, aNotify,
                                oldValue, &modType, &oldValueSet)) {
-      OnAttrSetButNotChanged(aNamespaceID, aName, value, aNotify);
       return NS_OK;
     }
   }
@@ -4515,6 +4571,25 @@ nsresult Element::CopyInnerTo(Element* aDst, ReparseAttributes aReparse) {
     }
   }
 
+  // https://dom.spec.whatwg.org/#clone-a-single-node
+  // Step 2.1. Let registry be node's custom element registry.
+  // Step 2.2. If registry is null, then set registry to fallbackRegistry.
+  // Step 2.3. If registry is a global custom element registry, then set
+  //           registry to document's effective global custom element registry.
+  // XXX Steps 2.1-2.3 are partially handled here by propagating registry
+  // state; the full registry resolution happens in "create an element".
+  CustomElementRegistryState state = GetCustomElementRegistryState();
+  if (state == CustomElementRegistryState::Scoped) {
+    MOZ_ASSERT(StaticPrefs::dom_scoped_custom_element_registries_enabled());
+    RefPtr<CustomElementRegistry> scopedRegistry =
+        CustomElementRegistry::GetScopedRegistry(*this);
+    aDst->SetCustomElementRegistry(scopedRegistry);
+  } else {
+    MOZ_ASSERT(state == CustomElementRegistryState::Global ||
+               StaticPrefs::dom_scoped_custom_element_registries_enabled());
+    aDst->SetCustomElementRegistryState(state);
+  }
+
   // https://html.spec.whatwg.org/#enqueue-a-custom-element-upgrade-reaction
   dom::NodeInfo* dstNodeInfo = aDst->NodeInfo();
   if (CustomElementData* data = GetCustomElementData()) {
@@ -4537,6 +4612,11 @@ nsresult Element::CopyInnerTo(Element* aDst, ReparseAttributes aReparse) {
     // Propagate :defined state to the static clone.
     if (State().HasState(ElementState::DEFINED)) {
       aDst->SetDefined(true);
+    }
+    // Propagate pseudo-element if needed.
+    auto pseudo = GetPseudoElementType();
+    if (pseudo != PseudoStyleType::NotPseudo) {
+      aDst->SetPseudoElementType(pseudo);
     }
   }
 
@@ -6175,8 +6255,7 @@ StylePropertyMapReadOnly* Element::ComputedStyleMap() {
   nsDOMSlots* slots = DOMSlots();
 
   if (!slots->mComputedStyleMap) {
-    slots->mComputedStyleMap =
-        MakeRefPtr<StylePropertyMapReadOnly>(this, /* aComputed */ true);
+    slots->mComputedStyleMap = MakeRefPtr<StylePropertyMapReadOnly>(this);
   }
 
   return slots->mComputedStyleMap;

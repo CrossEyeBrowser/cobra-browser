@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -22,7 +20,6 @@
 #include "gc/ParallelMarking.h"
 #include "gc/TraceKind.h"
 #include "jit/JitCode.h"
-#include "jit/JitScript.h"
 #include "js/GCTypeMacros.h"  // JS_FOR_EACH_PUBLIC_{,TAGGED_}GC_POINTER_TYPE
 #include "js/SliceBudget.h"
 #include "util/Poison.h"
@@ -942,8 +939,6 @@ void js::gc::PerformIncrementalPreWriteBarrier(TenuredCell* cell) {
   // The same as PerformIncrementalReadBarrier except for an extra check on the
   // runtime for cells in atoms zone.
 
-  Zone* zone = cell->zoneFromAnyThread();
-
   MOZ_ASSERT(cell);
   if (cell->isMarkedBlack()) {
     return;
@@ -952,6 +947,7 @@ void js::gc::PerformIncrementalPreWriteBarrier(TenuredCell* cell) {
   // Barriers can be triggered off the main thread by background finalization of
   // HeapPtrs to the atoms zone. We don't want to trigger the barrier in this
   // case.
+  Zone* zone = cell->zoneFromAnyThread();
   bool checkThread = zone->isAtomsZone();
   JSRuntime* runtime = cell->runtimeFromAnyThread();
   if (checkThread && !CurrentThreadCanAccessRuntime(runtime)) {
@@ -1030,10 +1026,6 @@ void js::GCMarker::markAndTraverse(T* thing) {
 //    weakmap key and thereby recurse into weakmapped values.
 
 template <uint32_t opts>
-void GCMarker::traverse(BaseShape* thing) {
-  traceChildren<opts>(thing);
-}
-template <uint32_t opts>
 void GCMarker::traverse(GetterSetter* thing) {
   traceChildren<opts>(thing);
 }
@@ -1059,6 +1051,10 @@ void GCMarker::traverse(JSString* thing) {
 }
 template <uint32_t opts>
 void GCMarker::traverse(Shape* thing) {
+  scanChildren<opts>(thing);
+}
+template <uint32_t opts>
+void GCMarker::traverse(BaseShape* thing) {
   scanChildren<opts>(thing);
 }
 template <uint32_t opts>
@@ -1423,17 +1419,18 @@ bool GCMarker::markOneObjectForTest(JSObject* obj) {
 // concurrent marking and interrupt the main thread to do this work.
 static constexpr size_t MainThreadBufferThreshold = 16384;
 
-inline bool GCMarker::addToMainThreadBuffer(JS::GCCellPtr ptr) {
+inline bool GCMarker::addToMainThreadBuffer(JSObject* object,
+                                            SliceBudget& budget) {
   auto& buffer = markColor() == MarkColor::Black ? blackMainThreadBuffer_.ref()
                                                  : grayMainThreadBuffer_.ref();
-  if (!buffer.append(ptr)) {
+  if (!buffer.append(object)) {
     return false;
   }
 
   if (MOZ_UNLIKELY(buffer.length() == MainThreadBufferThreshold)) {
-    AutoLockHelperThreadState lock;
-    GCRuntime* gc = &runtime()->gc;
-    gc->maybeRequestGCAfterBackgroundTask(lock);
+    // Ensure |budget.isOverBudget()| will return true if the buffer is full.
+    budget.setInterrupted();
+    budget.forceCheck();
   }
 
   return true;
@@ -1450,7 +1447,11 @@ bool GCMarker::processMainThreadBuffers(SliceBudget& budget) {
   }
 
   if (!grayMainThreadBuffer_.ref().empty()) {
-    AutoSetMarkColor autoSetGray(*this, MarkColor::Gray);
+    // Allow pushing gray marking even if there is still black marking
+    // work. This reduces the amount of handshaking between the main thread and
+    // the marking thread.
+    AutoSetMarkColor autoSetGray(*this, MarkColor::Gray,
+                                 AllowGrayMarkingBeforeEndOfBlackMarking::Yes);
     if (!processMainThreadBuffer(grayMainThreadBuffer_.ref(), budget)) {
       return false;
     }
@@ -1464,22 +1465,20 @@ bool GCMarker::processMainThreadBuffers(SliceBudget& budget) {
 bool GCMarker::processMainThreadBuffer(MainThreadBuffer& buffer,
                                        SliceBudget& budget) {
   while (!buffer.empty()) {
-    JS::GCCellPtr cell = buffer.popCopy();
-    if (cell.is<JSObject>()) {
-      JSObject* obj = &cell.as<JSObject>();
-      const JSClass* clasp = obj->getClass();
-      // It's possible for the mutator to swap a native object with a proxy
-      // after it go put into the buffer so we need to recheck for a trace hook
-      // here.
-      if (clasp->hasTrace()) {
-        AutoSetTracingSource asts(tracer(), obj);
-        clasp->doTrace(tracer(), obj);
-      }
-    } else {
-      BaseScript* script = &cell.as<BaseScript>();
-      if (script->hasJitScript()) {
-        script->jitScript()->trace(tracer());
-      }
+    JSObject* obj = buffer.popCopy();
+
+    MOZ_ASSERT(obj->isMarkedAtLeast(markColor()));
+    if (markColor() == MarkColor::Gray && obj->isMarkedBlack()) {
+      // We subsequently marked this black so we can skip marking it gray.
+      continue;
+    }
+
+    const JSClass* clasp = obj->getClass();
+    // It's possible for the mutator to swap a native object with a proxy after
+    // it got put into the buffer so we need to recheck for a trace hook here.
+    if (clasp->hasTrace()) {
+      AutoSetTracingSource asts(tracer(), obj);
+      clasp->doTrace(tracer(), obj);
     }
 
     budget.step();
@@ -1677,21 +1676,6 @@ inline bool GCMarker::processMarkStackTop(SliceBudget& budget) {
           markImplicitEdges(script);
         }
         AutoSetTracingSource asts(tracer(), script);
-
-#ifdef JS_GC_CONCURRENT_MARKING
-        // It's not safe to trace JitScript concurrently. Trace everything else
-        // and add the script to the main thread trace buffer.
-        if constexpr (bool(opts & MarkingOptions::ConcurrentMarking)) {
-          bool skippedJitScript = false;
-          script->traceChildrenConcurrently(tracer(), &skippedJitScript);
-          if (skippedJitScript &&
-              MOZ_UNLIKELY(!addToMainThreadBuffer(JS::GCCellPtr(script)))) {
-            delayMarkingChildrenOnOOM(script);
-          }
-          return true;
-        }
-#endif
-
         script->traceChildren(tracer());
         return true;
       }
@@ -1768,7 +1752,7 @@ scan_obj: {
   markAndTraverseEdge<opts>(obj, obj->shape());
 
   const JSClass* clasp = obj->getClass();
-  if (clasp->hasTrace() && !callOrDelayTraceHook<opts>(obj, clasp)) {
+  if (clasp->hasTrace() && !callOrDelayTraceHook<opts>(obj, clasp, budget)) {
     return false;
   }
 
@@ -1837,14 +1821,15 @@ scan_obj: {
 }
 
 template <uint32_t opts>
-bool GCMarker::callOrDelayTraceHook(JSObject* obj, const JSClass* clasp) {
+bool GCMarker::callOrDelayTraceHook(JSObject* obj, const JSClass* clasp,
+                                    JS::SliceBudget& budget) {
   MOZ_ASSERT(clasp->hasTrace());
 
 #ifdef JS_GC_CONCURRENT_MARKING
   if constexpr (bool(opts & MarkingOptions::ConcurrentMarking)) {
     // TODO: Add a class flag to allow us to call the trace hook concurrently
     // for classes that support it.
-    if (MOZ_UNLIKELY(!addToMainThreadBuffer(JS::GCCellPtr(obj)))) {
+    if (MOZ_UNLIKELY(!addToMainThreadBuffer(obj, budget))) {
       delayMarkingChildrenOnOOM(obj);
       return false;
     }
@@ -2339,8 +2324,7 @@ inline void MarkStack::poisonUnused() {
                capacity_ - topIndex_, MemCheckKind::MakeUndefined);
 }
 
-size_t MarkStack::sizeOfExcludingThis(
-    mozilla::MallocSizeOf mallocSizeOf) const {
+size_t MarkStack::sizeOfExcludingThis() const {
   return capacity_ * sizeof(uintptr_t);
 }
 
@@ -2445,13 +2429,16 @@ static void ClearEphemeronEdges(JSRuntime* rt) {
 void GCMarker::stop() {
   MOZ_ASSERT(isDrained());
   MOZ_ASSERT(markColor() == MarkColor::Black);
-  MOZ_ASSERT(!haveSwappedStacks);
 
   if (state == NotActive) {
+    MOZ_ASSERT(!haveSwappedStacks);
     return;
   }
   state = NotActive;
 
+  if (haveSwappedStacks) {
+    swapMarkStacks();
+  }
   otherStack.clearAndFreeStack();
   ClearEphemeronEdges(runtime());
   unmarkGrayStack.clearAndFree();
@@ -2459,6 +2446,11 @@ void GCMarker::stop() {
 
 void GCMarker::reset() {
   state = NotActive;
+
+  setMarkColor(MarkColor::Black);
+  if (haveSwappedStacks) {
+    swapMarkStacks();
+  }
 
   stack.clearAndResetCapacity();
   otherStack.clearAndFreeStack();
@@ -2470,8 +2462,6 @@ void GCMarker::reset() {
 #endif
 
   MOZ_ASSERT(isDrained());
-
-  setMarkColor(MarkColor::Black);
   MOZ_ASSERT(!haveSwappedStacks);
 
   unmarkGrayStack.clearAndFree();
@@ -2482,17 +2472,19 @@ void GCMarker::setMarkColor(gc::MarkColor newColor) {
     return;
   }
 
-  // We don't support gray marking while there is black marking work to do.
-  MOZ_ASSERT(!hasBlackEntries());
-
   markColor_ = newColor;
 
   // Switch stacks. We only need to do this if there are any stack entries (as
-  // empty stacks are interchangeable) or to swtich back to the original stack.
-  if (!isDrained() || haveSwappedStacks) {
-    stack.swap(otherStack);
-    haveSwappedStacks = !haveSwappedStacks;
+  // empty stacks are interchangeable) or to switch back to the original stack.
+  if (!isMarkStackEmpty() ||
+      (haveSwappedStacks && newColor == MarkColor::Black)) {
+    swapMarkStacks();
   }
+}
+
+void GCMarker::swapMarkStacks() {
+  stack.swap(otherStack);
+  haveSwappedStacks = !haveSwappedStacks;
 }
 
 bool GCMarker::hasEntries(MarkColor color) const {
@@ -2624,11 +2616,11 @@ IncrementalProgress JS::Zone::enterWeakMarkingMode(GCMarker* marker,
     return IncrementalProgress::Finished;
   }
 
-  for (auto r = gcEphemeronEdges().all(); !r.empty(); r.popFront()) {
-    Cell* src = r.front().key();
+  for (auto iter = gcEphemeronEdges().iter(); !iter.done(); iter.next()) {
+    Cell* src = iter.get().key();
     CellColor srcColor = gc::detail::GetEffectiveColor(marker, src);
 
-    auto& edges = r.front().value();
+    auto& edges = iter.get().value();
     size_t numEdges = edges.length();
     if (IsMarked(srcColor) && edges.length() > 0) {
       marker->markEphemeronEdges(edges, AsMarkColor(srcColor));
@@ -2832,8 +2824,8 @@ void GCMarker::checkZone(Cell* cell) {
 #endif
 
 size_t GCMarker::sizeOfIncludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
-  return mallocSizeOf(this) + stack.sizeOfExcludingThis(mallocSizeOf) +
-         otherStack.sizeOfExcludingThis(mallocSizeOf);
+  return mallocSizeOf(this) + stack.sizeOfExcludingThis() +
+         otherStack.sizeOfExcludingThis();
 }
 
 /*** IsMarked / IsAboutToBeFinalized ****************************************/
@@ -2964,12 +2956,21 @@ inline void SweepingTracer::onEdge(T** thingp, const char* name) {
   }
 #endif
 
+  // Any zone can contain references to symbols so make sure we've finished
+  // marking them before we try and sweep them. If this fails then we missed
+  // adding a sweep group edge somewhere. This check can be disabled in places
+  // where we only care about references from the current zone.
+  MOZ_ASSERT_IF(cell->getTraceKind() == JS::TraceKind::Symbol &&
+                    !allowSweepingSymbolsEarly,
+                !zone->isGCMarking());
+
   // It would be nice if we could assert that the zone of the tenured cell is in
   // the Sweeping state, but that isn't always true for:
   //  - atoms
   //  - the jitcode map
   //  - the mark queue
-  if ((zone->isGCSweeping() || zone->isAtomsZone()) && !cell->isMarkedAny()) {
+  if ((zone->isGCSweeping() || (zone->isAtomsZone() && zone->isGCMarking())) &&
+      !cell->isMarkedAny()) {
     *thingp = nullptr;
   }
 }

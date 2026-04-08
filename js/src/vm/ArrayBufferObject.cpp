@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -3591,10 +3589,10 @@ void InnerViewTable::sweepAfterMinorGC(JSTracer* trc) {
   }
 
   // Otherwise look at every map entry.
-  for (ArrayBufferViewMap::Enum e(map); !e.empty(); e.popFront()) {
-    MOZ_ASSERT(!gc::IsInsideNursery(e.front().key()));
-    if (!sweepViewsAfterMinorGC(trc, e.front().key(), e.front().value())) {
-      e.removeFront();
+  for (auto iter = map.modIter(); !iter.done(); iter.next()) {
+    MOZ_ASSERT(!gc::IsInsideNursery(iter.get().key()));
+    if (!sweepViewsAfterMinorGC(trc, iter.get().key(), iter.get().value())) {
+      iter.remove();
     }
   }
 }
@@ -3615,8 +3613,8 @@ bool InnerViewTable::sweepViewsAfterMinorGC(JSTracer* trc,
 
 size_t InnerViewTable::sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) {
   size_t vectorSize = 0;
-  for (auto r = map.all(); !r.empty(); r.popFront()) {
-    vectorSize += r.front().value().views.sizeOfExcludingThis(mallocSizeOf);
+  for (auto iter = map.iter(); !iter.done(); iter.next()) {
+    vectorSize += iter.get().value().views.sizeOfExcludingThis(mallocSizeOf);
   }
 
   return vectorSize + map.shallowSizeOfExcludingThis(mallocSizeOf) +

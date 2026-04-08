@@ -142,7 +142,7 @@ fn successful_connection_cancels_others() {
                 id: Id::from(4),
                 endpoint: Endpoint {
                     address: SocketAddr::new(V6_ADDR_2.into(), PORT),
-                    protocol: ConnectionAttemptHttpVersions::H2OrH1,
+                    http_version: ConnectionAttemptHttpVersions::H2OrH1,
                     ech_config: None,
                 },
             }),
@@ -303,40 +303,6 @@ fn cancelled_connection_result_ignored() {
             Some(in_connection_result_negative(Id::from(4))),
             Some(Output::Succeeded),
         )],
-        now,
-    );
-}
-
-#[test]
-fn all_connections_failed() {
-    let (now, mut he) = setup();
-
-    he.expect(
-        vec![
-            (None, Some(out_send_dns_https(Id::from(0)))),
-            (None, Some(out_send_dns_aaaa(Id::from(1)))),
-            (None, Some(out_send_dns_a(Id::from(2)))),
-            (
-                Some(in_dns_https_positive_no_alpn(Id::from(0))),
-                Some(out_resolution_delay()),
-            ),
-            (
-                Some(in_dns_aaaa_positive(Id::from(1))),
-                Some(out_attempt_v6_h1_h2(Id::from(3))),
-            ),
-            (
-                Some(in_dns_a_positive(Id::from(2))),
-                Some(out_connection_attempt_delay()),
-            ),
-            (
-                Some(in_connection_result_negative(Id::from(3))),
-                Some(out_attempt_v4_h1_h2(Id::from(4))),
-            ),
-            (
-                Some(in_connection_result_negative(Id::from(4))),
-                Some(Output::Failed),
-            ),
-        ],
         now,
     );
 }

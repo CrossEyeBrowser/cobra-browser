@@ -109,8 +109,6 @@ skip-if = [
 
 ["browser_animation_setCurrentTime.js"]
 
-["browser_animation_setPlaybackRate.js"]
-
 ["browser_animation_simple.js"]
 
 ["browser_animation_unhandledActorPlayers.js"]
@@ -176,6 +174,8 @@ tags = "devtools-compat-data"
 ["browser_inspector-traversal.js"]
 
 ["browser_inspector-utils.js"]
+
+["browser_layout_getFlexbox.js"]
 
 ["browser_layout_getGrids.js"]
 

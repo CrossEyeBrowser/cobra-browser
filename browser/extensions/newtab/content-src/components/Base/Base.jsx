@@ -11,6 +11,7 @@ import { ErrorBoundary } from "content-src/components/ErrorBoundary/ErrorBoundar
 import { CustomizeMenu } from "content-src/components/CustomizeMenu/CustomizeMenu";
 import React, { useState, useEffect } from "react";
 import { Search } from "content-src/components/Search/Search";
+import { TopSites } from "content-src/components/TopSites/TopSites";
 import { Sections } from "content-src/components/Sections/Sections";
 import { Logo } from "content-src/components/Logo/Logo";
 import { Weather } from "content-src/components/Weather/Weather";
@@ -21,6 +22,7 @@ import { DownloadMobilePromoHighlight } from "../DiscoveryStreamComponents/Featu
 import { WallpaperFeatureHighlight } from "../DiscoveryStreamComponents/FeatureHighlight/WallpaperFeatureHighlight";
 import { ActivationWindowMessage } from "../ActivationWindowMessage/ActivationWindowMessage";
 import { MessageWrapper } from "content-src/components/MessageWrapper/MessageWrapper";
+import { ExternalComponentWrapper } from "content-src/components/ExternalComponentWrapper/ExternalComponentWrapper";
 
 const VISIBLE = "visible";
 const VISIBILITY_CHANGE_EVENT = "visibilitychange";
@@ -28,7 +30,8 @@ const PREF_INFERRED_PERSONALIZATION_SYSTEM =
   "discoverystream.sections.personalization.inferred.enabled";
 const PREF_INFERRED_PERSONALIZATION_USER =
   "discoverystream.sections.personalization.inferred.user.enabled";
-
+// @nova-cleanup(remove-pref): Remove PREF_NOVA_ENABLED
+const PREF_NOVA_ENABLED = "nova.enabled";
 // Returns a function will not be continuously triggered when called. The
 // function will be triggered if called again after `wait` milliseconds.
 function debounce(func, wait) {
@@ -113,32 +116,25 @@ export class BaseContent extends React.PureComponent {
       this.handleDismissDownloadHighlight.bind(this);
     this.applyBodyClasses = this.applyBodyClasses.bind(this);
     this.toggleSectionsMgmtPanel = this.toggleSectionsMgmtPanel.bind(this);
+    this.toggleWidgetsManagementPanel =
+      this.toggleWidgetsManagementPanel.bind(this);
     this.state = {
       fixedSearch: false,
-      firstVisibleTimestamp: null,
       colorMode: "",
       fixedNavStyle: {},
       wallpaperTheme: "",
       showDownloadHighlightOverride: null,
       visible: false,
       showSectionsMgmtPanel: false,
+      showWidgetsManagementPanel: false,
     };
     this.spocPlaceholderStartTime = null;
-  }
-
-  setFirstVisibleTimestamp() {
-    if (!this.state.firstVisibleTimestamp) {
-      this.setState({
-        firstVisibleTimestamp: Date.now(),
-      });
-    }
   }
 
   onVisible() {
     this.setState({
       visible: true,
     });
-    this.setFirstVisibleTimestamp();
     this.shouldDisplayTopicSelectionModal();
     this.onVisibilityDispatch();
 
@@ -304,6 +300,9 @@ export class BaseContent extends React.PureComponent {
 
       const selectedWallpaper = prefs["newtabWallpapers.wallpaper"];
       const prevSelectedWallpaper = prevPrefs["newtabWallpapers.wallpaper"];
+      const initialWallpaper = prefs["newtabWallpapers.initialWallpaper"];
+      const prevInitialWallpaper =
+        prevPrefs["newtabWallpapers.initialWallpaper"];
       const uploadedWallpaperTheme =
         prefs["newtabWallpapers.customWallpaper.theme"];
       const prevUploadedWallpaperTheme =
@@ -312,6 +311,7 @@ export class BaseContent extends React.PureComponent {
       // don't update wallpaper unless the wallpaper is being changed.
       if (
         selectedWallpaper !== prevSelectedWallpaper || // selecting a new wallpaper
+        initialWallpaper !== prevInitialWallpaper || // experiment sets initial wallpaper
         uploadedWallpaper !== prevUploadedWallpaper || // uploading a new wallpaper
         wallpaperList !== prevWallpaperList || // remote settings wallpaper list updates
         this.props.App.isForStartupCache.Wallpaper !==
@@ -493,7 +493,8 @@ export class BaseContent extends React.PureComponent {
   renderWallpaperAttribution() {
     const { wallpaperList } = this.props.Wallpapers;
     const activeWallpaper =
-      this.props.Prefs.values[`newtabWallpapers.wallpaper`];
+      this.props.Prefs.values[`newtabWallpapers.wallpaper`] ||
+      this.props.Prefs.values[`newtabWallpapers.initialWallpaper`];
     const selected = wallpaperList.find(wp => wp.title === activeWallpaper);
     // make sure a wallpaper is selected and that the attribution also exists
     if (!selected?.attribution) {
@@ -528,7 +529,9 @@ export class BaseContent extends React.PureComponent {
 
   async updateWallpaper() {
     const prefs = this.props.Prefs.values;
-    const selectedWallpaper = prefs["newtabWallpapers.wallpaper"];
+    const selectedWallpaper =
+      prefs["newtabWallpapers.wallpaper"] ||
+      prefs["newtabWallpapers.initialWallpaper"];
     const { wallpaperList, uploadedWallpaper: uploadedWallpaperUrl } =
       this.props.Wallpapers;
     const uploadedWallpaperTheme =
@@ -662,6 +665,12 @@ export class BaseContent extends React.PureComponent {
     }));
   }
 
+  toggleWidgetsManagementPanel() {
+    this.setState(prevState => ({
+      showWidgetsManagementPanel: !prevState.showWidgetsManagementPanel,
+    }));
+  }
+
   shouldDisplayTopicSelectionModal() {
     const prefs = this.props.Prefs.values;
     const pocketEnabled =
@@ -710,7 +719,12 @@ export class BaseContent extends React.PureComponent {
     const { initialized, customizeMenuVisible } = App;
     const prefs = props.Prefs.values;
 
-    const activeWallpaper = prefs[`newtabWallpapers.wallpaper`];
+    // @nova-cleanup(remove-conditional):
+    const novaEnabled = prefs[PREF_NOVA_ENABLED];
+
+    const activeWallpaper =
+      prefs[`newtabWallpapers.wallpaper`] ||
+      prefs[`newtabWallpapers.initialWallpaper`];
     const wallpapersEnabled = prefs["newtabWallpapers.enabled"];
     const weatherEnabled = prefs.showWeather;
     const { showTopicSelection } = DiscoveryStream;
@@ -723,14 +737,15 @@ export class BaseContent extends React.PureComponent {
       section => section.id !== "topstories"
     );
 
+    const topSitesEnabled = prefs["feeds.topsites"];
     const pocketEnabled =
       prefs["feeds.section.topstories"] && prefs["feeds.system.topstories"];
     const noSectionsEnabled =
-      !prefs["feeds.topsites"] &&
+      !topSitesEnabled &&
       !pocketEnabled &&
       filteredSections.filter(section => section.enabled).length === 0;
     const enabledSections = {
-      topSitesEnabled: prefs["feeds.topsites"],
+      topSitesEnabled,
       pocketEnabled: prefs["feeds.section.topstories"],
       showInferredPersonalizationEnabled:
         prefs[PREF_INFERRED_PERSONALIZATION_USER],
@@ -809,6 +824,8 @@ export class BaseContent extends React.PureComponent {
       DiscoveryStream.feeds.loaded;
 
     const featureClassName = [
+      // Nova helper class to target pre-Nova CSS styles
+      "classic-enabled",
       mobileDownloadPromoEnabled &&
         mobileDownloadPromoVariantABorC &&
         "has-mobile-download-promo", // Mobile download promo modal is enabled/visible
@@ -831,10 +848,7 @@ export class BaseContent extends React.PureComponent {
         !noSectionsEnabled &&
         "fixed-search",
       prefs.showSearch && noSectionsEnabled && "only-search",
-      prefs["feeds.topsites"] &&
-        !pocketEnabled &&
-        !prefs.showSearch &&
-        "only-topsites",
+      topSitesEnabled && !pocketEnabled && !prefs.showSearch && "only-topsites",
       noSectionsEnabled && "no-sections",
       prefs["logowordmark.alwaysVisible"] && "visible-logo",
     ]
@@ -847,6 +861,113 @@ export class BaseContent extends React.PureComponent {
       this.state.showDownloadHighlightOverride ??
       this.shouldShowOMCHighlight("DownloadMobilePromoHighlight");
 
+    // @nova-cleanup(remove-conditional): Remove this conditional and
+    // always render the Nova layout below. The classic render() return
+    // and all its supporting variables (featureClassName, outerClassName,
+    //  mobileDownloadPromo*, etc.) will become dead code and should
+    // be deleted — expect lint errors for unused vars.
+    if (novaEnabled) {
+      // Bug 2016230
+      // If ONLY Search or ONLY Shortcuts or ONLY Search AND Shortcuts or NO features
+      // the logo should be centered instead of left-sidebar
+      const logoShouldBeCentered = false;
+
+      return (
+        <div>
+          <div className="container nova-enabled">
+            <div className="sidebar-inline-start">
+              {/* Logo */}
+              {/* TODO: Bug 2016230 - Add display logic for when to hide / display */}
+              {!logoShouldBeCentered && (
+                <ErrorBoundary>
+                  <Logo />
+                </ErrorBoundary>
+              )}
+              {/* Future: Page Nav  */}
+            </div>
+            <div className="content">
+              {/* Logo */}
+
+              {/* TODO: Bug 2016230 - Add display logic for when to hide / display */}
+              {logoShouldBeCentered && (
+                <ErrorBoundary>
+                  <Logo />
+                </ErrorBoundary>
+              )}
+
+              {/* Search */}
+              {prefs.showSearch && (
+                <ErrorBoundary>
+                  <Search showLogo={false} {...props.Search} />
+                </ErrorBoundary>
+              )}
+              {/* TODO: Break out Topsites, Widgets from DiscoveryStreamBase */}
+              {/* Shortcuts / Topsites */}
+              {topSitesEnabled && (
+                <ErrorBoundary>
+                  <TopSites />
+                </ErrorBoundary>
+              )}
+              {/* Widgets */}
+              {/* Content Feed */}
+              {isDiscoveryStream && (
+                <ErrorBoundary className="borderless-error">
+                  <DiscoveryStreamBase
+                    locale={props.App.locale}
+                    placeholder={this.isSpocsOnDemandExpired}
+                  />
+                </ErrorBoundary>
+              )}
+            </div>
+            <div className="sidebar-inline-end">
+              {/* Mini Widgets - Weather */}
+              {weatherEnabled && (
+                <ErrorBoundary>
+                  <Weather />
+                </ErrorBoundary>
+              )}
+            </div>
+          </div>
+          <menu className="personalizeButtonWrapper">
+            <CustomizeMenu
+              onClose={this.closeCustomizationMenu}
+              onOpen={this.openCustomizationMenu}
+              openPreferences={this.openPreferences}
+              setPref={this.setPref}
+              enabledSections={enabledSections}
+              enabledWidgets={enabledWidgets}
+              wallpapersEnabled={wallpapersEnabled}
+              activeWallpaper={activeWallpaper}
+              pocketRegion={pocketRegion}
+              mayHaveTopicSections={mayHavePersonalizedTopicSections}
+              mayHaveInferredPersonalization={mayHaveInferredPersonalization}
+              mayHaveWeather={mayHaveWeather}
+              mayHaveWidgets={mayHaveWidgets}
+              mayHaveTimerWidget={mayHaveTimerWidget}
+              mayHaveListsWidget={mayHaveListsWidget}
+              mayHaveWeatherForecast={
+                prefs["widgets.system.weatherForecast.enabled"]
+              }
+              weatherDisplay={prefs["weather.display"]}
+              showing={customizeMenuVisible}
+              toggleSectionsMgmtPanel={this.toggleSectionsMgmtPanel}
+              showSectionsMgmtPanel={this.state.showSectionsMgmtPanel}
+              showWidgetsManagementPanel={this.state.showWidgetsManagementPanel}
+              toggleWidgetsManagementPanel={this.toggleWidgetsManagementPanel}
+              widgetsEnabled={prefs["widgets.enabled"]}
+            />
+          </menu>
+          <ConfirmDialog />
+          {this.props.Notifications?.showNotifications && (
+            <ErrorBoundary>
+              <Notifications dispatch={this.props.dispatch} />
+            </ErrorBoundary>
+          )}
+        </div>
+      );
+    }
+
+    // @nova-cleanup(remove-conditional): Delete this entire classic return block along with all variables only used here
     return (
       <div className={featureClassName}>
         <div className="weatherWrapper">
@@ -899,6 +1020,15 @@ export class BaseContent extends React.PureComponent {
             {/* Bug 1914055: Show logo regardless if search is enabled */}
             {!prefs.showSearch && !noSectionsEnabled && <Logo />}
             <div className={`body-wrapper${initialized ? " on" : ""}`}>
+              {this.shouldShowOMCHighlight("ASRouterNewTabMessage") && (
+                <MessageWrapper dispatch={this.props.dispatch}>
+                  <ExternalComponentWrapper
+                    type="ASROUTER_NEWTAB_MESSAGE"
+                    messageData={this.props.Messages.messageData}
+                    className="asrouter-newtab-message-wrapper"
+                  />
+                </MessageWrapper>
+              )}
               {this.shouldShowOMCHighlight("ActivationWindowMessage") && (
                 <MessageWrapper dispatch={this.props.dispatch}>
                   <ActivationWindowMessage
@@ -911,7 +1041,6 @@ export class BaseContent extends React.PureComponent {
                 <ErrorBoundary className="borderless-error">
                   <DiscoveryStreamBase
                     locale={props.App.locale}
-                    firstVisibleTimestamp={this.state.firstVisibleTimestamp}
                     placeholder={this.isSpocsOnDemandExpired}
                   />
                 </ErrorBoundary>

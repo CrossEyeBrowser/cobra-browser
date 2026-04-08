@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set sw=2 ts=8 et tw=80 : */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -14,6 +12,7 @@
 #define LOG_ENABLED() LOG5_ENABLED()
 
 #include "nsHttpConnectionInfo.h"
+#include "mozilla/HashFunctions.h"
 
 #include "mozilla/net/DNS.h"
 #include "mozilla/net/NeckoChannelParams.h"
@@ -167,10 +166,9 @@ void nsHttpConnectionInfo::BuildHashKey() {
   // corresponding data fields on the object itself, you may also need to
   // modify RebuildHashKey.
 
-  const auto keyTemplate =
-      std::string(UnderlyingIndex(HashKeyIndex::End), '.') +
-      std::string("[tlsflags0x00000000]");
-  mHashKey.Assign(keyTemplate.c_str());
+  static_assert(static_cast<uint32_t>(HashKeyIndex::End) == 11,
+                "Update dot string in BuildHashKey if HashKeyIndex changes");
+  mHashKey.AssignLiteral("...........[tlsflags0x00000000]");
 
   mHashKey.Append(keyHost);
   mHashKey.Append(':');
@@ -504,7 +502,8 @@ void nsHttpConnectionInfo::SerializeHttpConnectionInfo(
 already_AddRefed<nsHttpConnectionInfo>
 nsHttpConnectionInfo::DeserializeHttpConnectionInfoCloneArgs(
     const HttpConnectionInfoCloneArgs& aInfoArgs) {
-  nsProxyInfo* pi = nsProxyInfo::DeserializeProxyInfo(aInfoArgs.proxyInfo());
+  RefPtr<nsProxyInfo> pi =
+      nsProxyInfo::DeserializeProxyInfo(aInfoArgs.proxyInfo());
   RefPtr<nsHttpConnectionInfo> cinfo;
   if (aInfoArgs.routedHost().IsEmpty()) {
     cinfo = new nsHttpConnectionInfo(
@@ -666,24 +665,10 @@ bool nsHttpConnectionInfo::HostIsLocalIPLiteral() const {
 // static
 HashNumber nsHttpConnectionInfo::BuildOriginFrameHashKey(
     nsHttpConnectionInfo* ci, const nsACString& host, int32_t port) {
-  nsAutoCString newKey(host);
-  if (ci->GetAnonymous()) {
-    newKey.AppendLiteral("~A:");
-  } else {
-    newKey.AppendLiteral("~.:");
-  }
-  if (ci->GetFallbackConnection()) {
-    newKey.AppendLiteral("~F:");
-  } else {
-    newKey.AppendLiteral("~.:");
-  }
-  newKey.AppendInt(port);
-  newKey.AppendLiteral("/[");
-  nsAutoCString suffix;
-  ci->GetOriginAttributes().CreateSuffix(suffix);
-  newKey.Append(suffix);
-  newKey.AppendLiteral("]viaORIGIN.FRAME");
-  return HashString(newKey);
+  static const HashNumber kViaOriginFrame = HashString("viaORIGIN.FRAME");
+  return AddToHash(HashString(host), ci->GetAnonymous(),
+                   ci->GetFallbackConnection(), port,
+                   ci->GetOriginAttributes().Hash(), kViaOriginFrame);
 }
 
 }  // namespace net

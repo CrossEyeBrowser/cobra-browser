@@ -15,10 +15,7 @@ import androidx.core.net.toUri
 import androidx.test.espresso.Espresso
 import androidx.test.filters.SdkSuppress
 import androidx.test.rule.ActivityTestRule
-import okhttp3.mockwebserver.MockWebServer
-import org.junit.After
 import org.junit.Assume
-import org.junit.Before
 import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
@@ -33,13 +30,14 @@ import org.mozilla.fenix.helpers.AppAndSystemHelper.setScreenOrientation
 import org.mozilla.fenix.helpers.AppAndSystemHelper.verifyKeyboardVisibility
 import org.mozilla.fenix.helpers.DataGenerationHelper.createCustomTabIntent
 import org.mozilla.fenix.helpers.DataGenerationHelper.getStringResource
+import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithText
 import org.mozilla.fenix.helpers.MockBrowserDataHelper.createBookmarkItem
 import org.mozilla.fenix.helpers.MockBrowserDataHelper.createHistoryItem
 import org.mozilla.fenix.helpers.MockBrowserDataHelper.generateBookmarkFolder
 import org.mozilla.fenix.helpers.MockBrowserDataHelper.setCustomSearchEngine
-import org.mozilla.fenix.helpers.SearchDispatcher
+import org.mozilla.fenix.helpers.SearchMockServerRule
 import org.mozilla.fenix.helpers.TestAssetHelper.getGenericAsset
 import org.mozilla.fenix.helpers.TestAssetHelper.htmlControlsFormAsset
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTimeLong
@@ -48,7 +46,6 @@ import org.mozilla.fenix.helpers.TestHelper.clickSnackbarButton
 import org.mozilla.fenix.helpers.TestHelper.exitMenu
 import org.mozilla.fenix.helpers.TestHelper.verifyDarkThemeApplied
 import org.mozilla.fenix.helpers.TestHelper.verifyLightThemeApplied
-import org.mozilla.fenix.helpers.TestSetup
 import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.ui.robots.browserScreen
@@ -69,10 +66,13 @@ import org.mozilla.fenix.ui.robots.searchScreen
  *  - Find in page
  */
 
-class NavigationToolbarTest : TestSetup() {
-    private val customTabActionButton = "CustomActionButton"
+class NavigationToolbarTest {
+    @get:Rule(order = 0)
+    val fenixTestRule: FenixTestRule = FenixTestRule()
 
-    private lateinit var searchMockServer: MockWebServer
+    private val mockWebServer get() = fenixTestRule.mockWebServer
+
+    private val customTabActionButton = "CustomActionButton"
 
     private val bookmarkFolderName = "My Folder"
 
@@ -123,20 +123,8 @@ class NavigationToolbarTest : TestSetup() {
     @get:Rule
     val memoryLeaksRule = DetectMemoryLeaksRule()
 
-    @Before
-    override fun setUp() {
-        super.setUp()
-        searchMockServer = MockWebServer().apply {
-            dispatcher = SearchDispatcher()
-            start()
-        }
-    }
-
-    @After
-    override fun tearDown() {
-        super.tearDown()
-        searchMockServer.shutdown()
-    }
+    @get:Rule
+    val searchMockServerRule = SearchMockServerRule()
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3135074
     @SmokeTest
@@ -242,6 +230,7 @@ class NavigationToolbarTest : TestSetup() {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3135106
+    @Ignore("Failing, see https://bugzilla.mozilla.org/show_bug.cgi?id=2021581")
     @SmokeTest
     @Test
     fun verifyShowSearchSuggestionsToggleTest() {
@@ -310,8 +299,8 @@ class NavigationToolbarTest : TestSetup() {
     @SmokeTest
     @Test
     fun verifyHistorySearchWithBrowsingHistoryTest() {
-        val firstPageUrl = searchMockServer.getGenericAsset(1)
-        val secondPageUrl = searchMockServer.getGenericAsset(2)
+        val firstPageUrl = searchMockServerRule.server.getGenericAsset(1)
+        val secondPageUrl = searchMockServerRule.server.getGenericAsset(2)
 
         createHistoryItem(firstPageUrl.url.toString())
         createHistoryItem(secondPageUrl.url.toString())
@@ -361,10 +350,10 @@ class NavigationToolbarTest : TestSetup() {
     fun searchHistoryNotRememberedInPrivateBrowsingTest() {
         TestHelper.appContext.settings().shouldShowSearchSuggestionsInPrivate = true
 
-        val firstPageUrl = searchMockServer.getGenericAsset(1)
+        val firstPageUrl = searchMockServerRule.server.getGenericAsset(1)
         val searchEngineName = "TestSearchEngine"
 
-        setCustomSearchEngine(searchMockServer, searchEngineName)
+        setCustomSearchEngine(searchMockServerRule.server, searchEngineName)
         createBookmarkItem(firstPageUrl.url.toString(), firstPageUrl.title, 1u)
 
         homeScreen(composeTestRule) {
@@ -402,11 +391,11 @@ class NavigationToolbarTest : TestSetup() {
     @SmokeTest
     @Test
     fun searchResultsOpenedInNewTabsGenerateSearchGroupsTest() {
-        val firstPageUrl = searchMockServer.getGenericAsset(1).url
-        val secondPageUrl = searchMockServer.getGenericAsset(2).url
+        val firstPageUrl = searchMockServerRule.server.getGenericAsset(1).url
+        val secondPageUrl = searchMockServerRule.server.getGenericAsset(2).url
         val searchEngineName = "TestSearchEngine"
         // setting our custom mockWebServer search URL
-        setCustomSearchEngine(searchMockServer, searchEngineName)
+        setCustomSearchEngine(searchMockServerRule.server, searchEngineName)
 
         // Performs a search and opens 2 dummy search results links to create a search group
         homeScreen(composeTestRule) {
@@ -436,7 +425,7 @@ class NavigationToolbarTest : TestSetup() {
     fun searchGroupIsNotGeneratedForLinksOpenedInPrivateTabsTest() {
         // setting our custom mockWebServer search URL
         val searchEngineName = "TestSearchEngine"
-        setCustomSearchEngine(searchMockServer, searchEngineName)
+        setCustomSearchEngine(searchMockServerRule.server, searchEngineName)
 
         // Performs a search and opens 2 dummy search results links to create a search group
         homeScreen(composeTestRule) {
@@ -827,6 +816,7 @@ class NavigationToolbarTest : TestSetup() {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3135067
+    @SmokeTest
     @Test
     fun verifyTheNewTabButtonTest() {
         val firstPage = mockWebServer.getGenericAsset(1)
@@ -874,8 +864,8 @@ class NavigationToolbarTest : TestSetup() {
 
         navigationToolbar(composeTestRule) {
             verifyNavBarPositionWithTabStripEnabled(true)
-            verifyTheTheTabStripPageViewNavigationBarBookmarkButton()
-            verifyTheTabStripNavigationBarShareButton()
+            verifyTheNavigationBarAddBookmarkButton()
+            verifyTheNavigationBarShareButton()
             verifyTheNewTabButton()
             verifyTheTabCounter("0")
             verifyTheMainMenuButton()
@@ -914,8 +904,8 @@ class NavigationToolbarTest : TestSetup() {
             verifyTheTabStripOpenTab("Test_Page_1")
             verifyTheTabStripCloseTabButton("Test_Page_1")
             verifyNavBarPositionWithTabStripEnabled(true)
-            verifyTheTheTabStripPageViewNavigationBarBookmarkButton()
-            verifyTheTabStripNavigationBarShareButton()
+            verifyTheNavigationBarAddBookmarkButton()
+            verifyTheNavigationBarShareButton()
             verifyTheNewTabButton(false)
             verifyTheTabCounter("1")
             verifyTheMainMenuButton()

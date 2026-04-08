@@ -866,11 +866,7 @@
   <string name="customize_addon_collection_user_hint">مالک مجموعه (شناسه کاربری)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">مجموعه افزونه‌ها تغییر کرده است. برای اعمال تغییرات برنامه را ببندید…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">بازگشت به داخل</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">نشانک‌ها</string>
@@ -1272,10 +1268,6 @@
   <string name="studies_remove">حذف</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">فعال</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">ویژگی‌ها و ایده‌ها را قبل از انتشار برای همه امتحان کنید.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">نصب و اجرای مطالعات</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
   <string name="studies_learn_more">بیشتر بدانید</string>
   <!--
@@ -1595,7 +1587,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">ویرایش</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">رونوشت</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">رونوشت</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">هم‌رسانی</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -1649,12 +1641,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">%1$sحذف شد</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">برگردان</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">برگردان</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">%s حذف شد</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">%s حذف شد</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">موارد حذف شده: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">موارد حذف شده: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">بازگشت به عقب</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">افزودن پوشه جدید</string>
@@ -1903,23 +1899,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">‏Firefox را مروگر پیش‌فرض‌تان بکنید</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">مرور خصوصی را بیازمایید</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">مرور خصوصی را بیازمایید</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">در %1$s بدون هیچ کلوچک یا تاریخچهٔ ذخیره شده‌ای مرور کنید</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">در %1$s بدون هیچ کلوچک یا تاریخچهٔ ذخیره شده‌ای مرور کنید</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">بدون ردیابی شدن مرور کنید</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">بدون ردیابی شدن مرور کنید</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">مرور خصوصی در %1$s اطلاعات شما را ذخیره نمی‌کند.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">مرور خصوصی در %1$s اطلاعات شما را ذخیره نمی‌کند.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">نخستین جست‌وجویتان را شروع کنید</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">نخستین جست‌وجویتان را شروع کنید</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">چیزی نزدیک را بیابید. یا چیزی جالب کشف کنید.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">چیزی نزدیک را بیابید. یا چیزی جالب کشف کنید.</string>
   <!--
     Survey
 
@@ -1970,8 +1966,6 @@
   <string name="preference_accessibility_text_size_summary">متن را در وبگاه‌ها بزرگتر یا کوچکتر کنید</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">اندازه قلم</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">اندازه قلم خودکار</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2849,7 +2843,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">نتوانستیم زبان‌ها را بارگیری کنیم. اتصال اینترنت خود را بررسی کرده و دوباره تلاش کنید.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">متاسفیم، ما هنوز از %1$s پشتیبانی نمی‌کنیم.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">متاسفیم، ما هنوز از %1$s پشتیبانی نمی‌کنیم.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">ترجمه در حال انجام…</string>
   <!--
@@ -3152,6 +3146,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">افزودن به زبانه‌های خصوصی</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 

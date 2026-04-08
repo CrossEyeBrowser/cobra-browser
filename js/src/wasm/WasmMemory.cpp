@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2021 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,15 +16,11 @@
 
 #include "wasm/WasmMemory.h"
 
-#include "mozilla/MathAlgorithms.h"
-
 #include "js/Conversions.h"
 #include "js/ErrorReport.h"
 #include "vm/ArrayBufferObject.h"
 #include "wasm/WasmCodegenTypes.h"
 #include "wasm/WasmProcess.h"
-
-using mozilla::IsPowerOfTwo;
 
 using namespace js;
 using namespace js::wasm;

@@ -283,7 +283,7 @@ export class TCPConnection {
    */
   async execute(cmd) {
     let resp = this.createResponse(cmd.id);
-    let sendResponse = () => resp.sendConditionally(resp => !resp.sent);
+    let sendResponse = () => resp.sendConditionally(r => !r.sent);
     let sendError = resp.sendError.bind(resp);
 
     await this.dispatch(cmd, resp)
@@ -306,16 +306,12 @@ export class TCPConnection {
   async dispatch(cmd, resp) {
     const startTime = ChromeUtils.now();
 
-    let fn = this.driver.commands[cmd.name];
-    if (typeof fn == "undefined") {
-      throw new lazy.error.UnknownCommandError(cmd.name);
-    }
-
-    if (cmd.name != "WebDriver:NewSession") {
+    if (cmd.name !== "WebDriver:NewSession") {
       lazy.assert.session(this.driver.currentSession);
     }
 
-    let rv = await fn.bind(this.driver)(cmd);
+    const handler = this.driver.getCommandHandler(cmd.name);
+    const rv = await handler.bind(this.driver)(cmd);
 
     // Bug 1819029: Some older commands cannot return a response wrapped within
     // a value field because it would break compatibility with geckodriver and
@@ -352,7 +348,7 @@ export class TCPConnection {
       }
     }
 
-    if (Services.profiler?.IsActive()) {
+    if (Services.profiler.IsActive()) {
       ChromeUtils.addProfilerMarker(
         "Marionette: Command",
         { startTime, category: "Remote-Protocol" },

@@ -841,7 +841,6 @@ export class ContextMenuChild extends JSWindowActorChild {
     context.onSpellcheckable = false;
     context.onTextInput = false;
     context.onVideo = false;
-    context.inPDFEditor = false;
 
     const textDirectiveRanges =
       this.document.fragmentDirective?.getTextDirectiveRanges?.() || [];
@@ -862,8 +861,7 @@ export class ContextMenuChild extends JSWindowActorChild {
       context.target.ownerDocument.nodePrincipal.originNoSuffix ==
       "resource://pdf.js";
     if (context.inPDFViewer) {
-      context.pdfEditorStates = context.target.ownerDocument.editorStates;
-      context.inPDFEditor = !!context.pdfEditorStates?.isEditing;
+      context.pdfStates = context.target.ownerDocument.pdfStates;
     }
 
     // Check if we are in a synthetic document (stand alone image, video, etc.).
@@ -1108,16 +1106,22 @@ export class ContextMenuChild extends JSWindowActorChild {
         if (
           !context.onLink &&
           // Be consistent with what hrefAndLinkNodeForClickEvent
-          // does in browser.js
-          (this._isXULTextLinkLabel(elem) ||
-            (this.contentWindow.HTMLAnchorElement.isInstance(elem) &&
-              elem.href) ||
-            (this.contentWindow.SVGAElement.isInstance(elem) &&
-              (elem.href || elem.hasAttributeNS(XLINK_NS, "href"))) ||
+          // does in BrowserUtils.sys.msj
+          ((this.contentWindow.HTMLAnchorElement.isInstance(elem) &&
+            elem.href) ||
             (this.contentWindow.HTMLAreaElement.isInstance(elem) &&
               elem.href) ||
             this.contentWindow.HTMLLinkElement.isInstance(elem) ||
-            elem.getAttributeNS(XLINK_NS, "type") == "simple")
+            (this.contentWindow.SVGAElement.isInstance(elem) &&
+              (elem.href || elem.hasAttributeNS(XLINK_NS, "href"))) ||
+            (this.contentWindow.MathMLElement.isInstance(elem) &&
+              (elem.localName == "a" ||
+                !Services.prefs.getBoolPref(
+                  "mathml.href_link_on_non_anchor_element.disabled"
+                )) &&
+              elem.hasAttribute("href")) ||
+            elem.getAttributeNS(XLINK_NS, "type") == "simple" ||
+            this._isXULTextLinkLabel(elem))
         ) {
           // Target is a link or a descendant of a link.
           context.onLink = true;

@@ -22,7 +22,7 @@ pub mod generated {
 }
 
 use crate::applicable_declarations::RevertKind;
-use crate::custom_properties::{self, ComputedCustomProperties};
+use crate::custom_properties::{self, ComputedSubstitutionFunctions, SubstitutionResult};
 use crate::derives::*;
 use crate::dom::AttributeTracker;
 #[cfg(feature = "gecko")]
@@ -46,6 +46,7 @@ use style_traits::{
     CssString, CssWriter, KeywordsCollectFn, ParseError, ParsingMode, SpecifiedValueInfo, ToCss,
     ToTyped, TypedValue,
 };
+use thin_vec::ThinVec;
 
 bitflags! {
     /// A set of flags for properties.
@@ -159,8 +160,8 @@ pub struct WideKeywordDeclaration {
 // XXX Switch back to ToTyped derive once it can automatically handle structs
 // Tracking in bug 1991631
 impl ToTyped for WideKeywordDeclaration {
-    fn to_typed(&self) -> Option<TypedValue> {
-        self.keyword.to_typed()
+    fn to_typed(&self, dest: &mut ThinVec<TypedValue>) -> Result<(), ()> {
+        self.keyword.to_typed(dest)
     }
 }
 
@@ -733,6 +734,15 @@ impl ShorthandId {
     }
 }
 
+/// Return the names of arbitrary substitution functions that are enabled.
+pub fn enabled_arbitrary_substitution_functions() -> &'static [&'static str] {
+    if static_prefs::pref!("layout.css.attr.enabled") {
+        &["var", "env", "attr"]
+    } else {
+        &["var", "env"]
+    }
+}
+
 fn parse_non_custom_property_declaration_value_into<'i>(
     declarations: &mut SourcePropertyDeclaration,
     context: &ParserContext,
@@ -764,13 +774,7 @@ fn parse_non_custom_property_declaration_value_into<'i>(
     };
 
     input.reset(&start);
-    input.look_for_arbitrary_substitution_functions(
-        if static_prefs::pref!("layout.css.attr.enabled") {
-            &["var", "env", "attr"]
-        } else {
-            &["var", "env"]
-        },
-    );
+    input.look_for_arbitrary_substitution_functions(enabled_arbitrary_substitution_functions());
 
     let err = match parse_entirely_into(declarations, input) {
         Ok(()) => {
@@ -1451,7 +1455,7 @@ impl UnparsedValue {
     fn substitute_variables<'cache>(
         &self,
         longhand_id: LonghandId,
-        custom_properties: &ComputedCustomProperties,
+        substitution_functions: &ComputedSubstitutionFunctions,
         stylist: &Stylist,
         computed_context: &computed::Context,
         shorthand_cache: &'cache mut ShorthandsWithPropertyReferencesCache,
@@ -1485,9 +1489,12 @@ impl UnparsedValue {
             }
         }
 
-        let css = match custom_properties::substitute(
+        let SubstitutionResult {
+            css,
+            attribute_tainted,
+        } = match custom_properties::substitute(
             &self.variable_value,
-            custom_properties,
+            substitution_functions,
             stylist,
             computed_context,
             attribute_tracker,
@@ -1506,11 +1513,15 @@ impl UnparsedValue {
         // whether you want to do this!
         //
         // FIXME(emilio): ParsingMode is slightly fishy...
+        let mut parsing_mode = ParsingMode::DEFAULT;
+        if attribute_tainted {
+            parsing_mode.insert(ParsingMode::DISALLOW_URLS);
+        }
         let context = ParserContext::new(
             Origin::Author,
             &self.variable_value.url_data,
             None,
-            ParsingMode::DEFAULT,
+            parsing_mode,
             computed_context.quirks_mode,
             /* namespaces = */ Default::default(),
             None,

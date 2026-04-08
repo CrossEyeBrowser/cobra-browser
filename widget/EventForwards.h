@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -124,8 +123,7 @@ typedef uint16_t Modifiers;
 
 #define NS_DEFINE_KEYNAME(aCPPName, aDOMKeyName) KEY_NAME_INDEX_##aCPPName,
 
-typedef uint16_t KeyNameIndexType;
-enum KeyNameIndex : KeyNameIndexType {
+enum KeyNameIndex : uint16_t {
 #include "mozilla/KeyNameList.inc"
   // If a DOM keyboard event is synthesized by script, this is used.  Then,
   // specified key name should be stored and use it as .key value.
@@ -139,8 +137,7 @@ const nsCString ToString(KeyNameIndex aKeyNameIndex);
 #define NS_DEFINE_PHYSICAL_KEY_CODE_NAME(aCPPName, aDOMCodeName) \
   CODE_NAME_INDEX_##aCPPName,
 
-typedef uint8_t CodeNameIndexType;
-enum CodeNameIndex : CodeNameIndexType {
+enum CodeNameIndex : uint8_t {
 #include "mozilla/PhysicalKeyCodeNameList.inc"
   // If a DOM keyboard event is synthesized by script, this is used.  Then,
   // specified code name should be stored and use it as .code value.

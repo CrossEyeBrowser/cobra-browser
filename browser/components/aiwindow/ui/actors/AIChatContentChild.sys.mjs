@@ -28,6 +28,9 @@ export class AIChatContentChild extends JSWindowActorChild {
     "AIChatContent:RemoveAppliedMemory": {
       event: "aiChatContentActor:remove-applied-memory",
     },
+    "AIChatContent:SeenUrls": {
+      event: "aiChatContentActor:seen-urls",
+    },
   };
 
   static #VALID_EVENTS_FROM_CONTENT = new Set([
@@ -37,6 +40,7 @@ export class AIChatContentChild extends JSWindowActorChild {
     "AIChatContent:DispatchAction",
     "AIChatContent:OpenLink",
     "AIChatContent:DispatchNewChat",
+    "AIChatContent:AccountSignIn",
   ]);
 
   /**
@@ -80,6 +84,10 @@ export class AIChatContentChild extends JSWindowActorChild {
 
       case "AIChatContent:OpenLink":
         this.sendAsyncMessage("AIChatContent:OpenLink", event.detail);
+        break;
+
+      case "AIChatContent:AccountSignIn":
+        this.sendAsyncMessage("AIChatContent:AccountSignIn", event.detail);
         break;
 
       default:

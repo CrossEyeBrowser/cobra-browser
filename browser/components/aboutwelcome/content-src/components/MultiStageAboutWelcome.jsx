@@ -375,6 +375,7 @@ export const MultiStageAboutWelcome = props => {
               langPackInstallPhase={langPackInstallPhase}
               forceHideStepsIndicator={currentScreen.force_hide_steps_indicator}
               ariaRole={props.ariaRole}
+              requireAction={props.requireAction}
               aboveButtonStepsIndicator={
                 currentScreen.above_button_steps_indicator
               }
@@ -705,7 +706,7 @@ export class WelcomeScreen extends React.PureComponent {
 
   resolveActionFromContent(value, event, props) {
     if (
-      (value === "submenu_button" || value === "tile_button") &&
+      ["submenu_button", "more_button", "tile_button"].includes(value) &&
       event.action
     ) {
       return event.action;
@@ -1018,6 +1019,7 @@ export class WelcomeScreen extends React.PureComponent {
         autoAdvance={this.props.autoAdvance}
         forceHideStepsIndicator={this.props.forceHideStepsIndicator}
         ariaRole={this.props.ariaRole}
+        requireAction={this.props.requireAction}
         aboveButtonStepsIndicator={this.props.aboveButtonStepsIndicator}
         addonId={this.props.addonId}
         addonType={this.props.addonType}

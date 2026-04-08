@@ -72,14 +72,14 @@ TEST_SUITES = {
         "aliases": ("mn",),
         "build_flavor": "marionette",
         "mach_command": "marionette-test",
-        "kwargs": {"tests": None},
+        "kwargs": {"tests": None, "subsuite": "integration"},
         "task_regex": ["marionette($|.*(-1|[^0-9])$)"],
     },
     "marionette-unittest": {
         "aliases": ("mnself",),
         "build_flavor": "marionette",
         "mach_command": "marionette-test",
-        "kwargs": {"tests": None},
+        "kwargs": {"tests": None, "subsuite": "unittest"},
         "task_regex": ["marionette($|.*(-1|[^0-9])$)"],
     },
     "mochitest-a11y": {
@@ -1182,6 +1182,7 @@ class TestResolver(MozbuildObject):
         self._reset_state()
 
         wpt_path = os.path.join(self.topsrcdir, "testing", "web-platform")
+        old_path = sys.path[:]
         sys.path = [wpt_path] + sys.path
 
         import logging
@@ -1200,6 +1201,9 @@ class TestResolver(MozbuildObject):
             update=True,
             logger=logger,
         )
+
+        sys.path = old_path
+
         if not manifests:
             print("Loading wpt manifest failed")
             return

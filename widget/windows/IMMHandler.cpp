@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim:set ts=2 sts=2 sw=2 et cin: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -344,9 +342,8 @@ UINT IMMHandler::GetKeyboardCodePage() { return sCodePage; }
 
 // static
 IMENotificationRequests IMMHandler::GetIMENotificationRequests() {
-  return IMENotificationRequests(
-      IMENotificationRequests::NOTIFY_POSITION_CHANGE |
-      IMENotificationRequests::NOTIFY_MOUSE_BUTTON_EVENT_ON_CHAR);
+  return {IMENotificationRequest::PositionChange,
+          IMENotificationRequest::MouseEventOnChar};
 }
 
 // used for checking the lParam of WM_IME_COMPOSITION

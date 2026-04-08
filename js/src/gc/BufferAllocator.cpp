@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -8,6 +6,8 @@
 
 #include "mozilla/Likely.h"
 #include "mozilla/ScopeExit.h"
+
+#include <bit>
 
 #ifdef XP_DARWIN
 #  include <mach/mach_init.h>
@@ -2254,7 +2254,7 @@ void* BufferAllocator::allocFromRegion(FreeRegion* region, size_t bytes,
 void* BufferAllocator::allocMediumAligned(size_t bytes, bool inGC) {
   MOZ_ASSERT(bytes >= MinMediumAllocSize);
   MOZ_ASSERT(bytes <= MaxAlignedAllocSize);
-  MOZ_ASSERT(mozilla::IsPowerOfTwo(bytes));
+  MOZ_ASSERT(std::has_single_bit(bytes));
 
   // Get size class from |bytes|.
   size_t sizeClass = SizeClassForMediumAlloc(bytes);
@@ -3276,10 +3276,13 @@ LargeBuffer* BufferAllocator::lookupLargeBuffer(void* alloc, MaybeLock& lock) {
   return buffer;
 }
 
-void* BufferAllocator::allocLarge(size_t bytes, bool nurseryOwned, bool inGC) {
-  bytes = RoundUp(bytes, ChunkSize);
+void* BufferAllocator::allocLarge(size_t requestedBytes, bool nurseryOwned,
+                                  bool inGC) {
+  size_t bytes = RoundUp(requestedBytes, ChunkSize);
+  if (MOZ_UNLIKELY(bytes < requestedBytes)) {
+    return nullptr;
+  }
   MOZ_ASSERT(bytes > MaxMediumAllocSize);
-  MOZ_ASSERT(bytes >= bytes);
 
   // Allocate a small buffer the size of a LargeBuffer to hold the metadata.
   static_assert(sizeof(LargeBuffer) <= MaxSmallAllocSize);

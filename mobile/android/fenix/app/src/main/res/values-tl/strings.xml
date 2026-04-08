@@ -763,11 +763,7 @@
   <string name="customize_addon_collection_user_hint">May-ari ng collection (User ID)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">Nabago na ang koleksyon ng extension. Isasara nang saglit ang application para mailapat ang mga pagbabago…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Balikan ang naiwan</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Mga bookmark</string>
@@ -1109,10 +1105,6 @@
   <string name="studies_remove">Alisin</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Aktibo</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Subukan ang mga feature at ideya bago pa ito mailabas sa lahat.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Mag-install at magpatakbo ng mga study</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
   <string name="studies_learn_more">Alamin</string>
   <!--
@@ -1371,7 +1363,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Baguhin</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Kopyahin</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Kopyahin</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Ibahagi</string>
   <!-- Bookmark overflow menu open in new tab button -->
@@ -1423,12 +1415,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">Binura na ang %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">I-UNDO</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">I-UNDO</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">Nabura na ang %s</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">Nabura na ang %s</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Mga nabura: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Mga nabura: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Bumalik</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Magdagdag ng bagong folder</string>
@@ -1671,23 +1667,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Gawin mong default browser ang Firefox</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Subukan ang pribadong pag-browse</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Subukan ang pribadong pag-browse</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Mag-browse nang walang naka-save na cookie o kasaysayan gamit ang %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Mag-browse nang walang naka-save na cookie o kasaysayan gamit ang %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Mag-browse nang walang bakas</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Mag-browse nang walang bakas</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">Hindi nase-save ang info mo sa pribadong pag-browse sa %1$s.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">Hindi nase-save ang info mo sa pribadong pag-browse sa %1$s.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Simulan ang iyong unang paghahanap</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Simulan ang iyong unang paghahanap</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Humanap ka ng kakaiba, o kaya masaya!</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Humanap ka ng kakaiba, o kaya masaya!</string>
   <!--
     Survey
 
@@ -2604,7 +2600,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">Hindi ma-load ang mga wika. Suriin ang iyong koneksyon sa internet at subukan uli.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">Pasensya na, hindi pa namin suportado ang %1$s.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">Pasensya na, hindi pa namin suportado ang %1$s.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">Nagsasalin…</string>
   <!--
@@ -2907,6 +2903,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Idagdag sa mga pribadong tab</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 

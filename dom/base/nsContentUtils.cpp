@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -212,6 +210,8 @@
 #include "mozilla/dom/ViewTransition.h"
 #include "mozilla/dom/WindowBinding.h"
 #include "mozilla/dom/WindowContext.h"
+#include "mozilla/dom/WindowGlobalChild.h"
+#include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/dom/WorkerCommon.h"
 #include "mozilla/dom/WorkerPrivate.h"
 #include "mozilla/dom/WorkerRunnable.h"
@@ -445,8 +445,10 @@ static nsTHashMap<nsStringHashKey, EventNameMapping>* sStringEventTable;
 static nsTArray<RefPtr<nsAtom>>* sUserDefinedEvents;
 nsIStringBundleService* nsContentUtils::sStringBundleService;
 
-static StaticRefPtr<nsIStringBundle>
-    sStringBundles[nsContentUtils::PropertiesFile_COUNT];
+static constexpr size_t kPropertiesFileCount =
+    static_cast<size_t>(PropertiesFile::COUNT);
+
+static StaticRefPtr<nsIStringBundle> sStringBundles[kPropertiesFileCount];
 
 nsIContentPolicy* nsContentUtils::sContentPolicyService;
 bool nsContentUtils::sTriedToGetContentPolicy = false;
@@ -2404,6 +2406,86 @@ nsIPrincipal* nsContentUtils::GetAttrTriggeringPrincipal(
 }
 
 // static
+bool nsContentUtils::CanNavigate(mozilla::dom::BrowsingContext* aSource,
+                                 mozilla::dom::BrowsingContext* aTarget,
+                                 nsIPrincipal* aDocumentPrincipal,
+                                 bool aConsiderOpener) {
+  MOZ_DIAGNOSTIC_ASSERT(
+      aSource->Group() == aTarget->Group(),
+      "Source and target BrowsingContexts must be in the same group");
+  if (aSource->Group() != aTarget->Group()) {
+    return false;
+  }
+
+  auto isFileScheme = [](nsIPrincipal* aPrincipal) -> bool {
+    // NOTE: This code previously checked for a file scheme using
+    // `nsIPrincipal::GetURI()` combined with `NS_GetInnermostURI`. We no longer
+    // use GetURI, as it has been deprecated, and it makes more sense to take
+    // advantage of the pre-computed origin, which will already use the
+    // innermost URI (bug 1810619)
+    nsAutoCString origin, scheme;
+    return NS_SUCCEEDED(aPrincipal->GetOriginNoSuffix(origin)) &&
+           NS_SUCCEEDED(net_ExtractURLScheme(origin, scheme)) &&
+           scheme == "file"_ns;
+  };
+
+  // A frame can navigate itself and its own root.
+  if (aTarget == aSource || aTarget == aSource->Top()) {
+    return true;
+  }
+
+  // If the target frame doesn't yet have a WindowContext, start checking
+  // principals from its direct ancestor instead. It would inherit its principal
+  // from this document upon creation.
+  dom::WindowContext* initialWc = aTarget->GetCurrentWindowContext();
+  if (!initialWc) {
+    initialWc = aTarget->GetParentWindowContext();
+  }
+
+  // A frame can navigate any frame with a same-origin ancestor.
+  bool isFileDocument = isFileScheme(aDocumentPrincipal);
+  for (dom::WindowContext* wc = initialWc; wc;
+       wc = wc->GetParentWindowContext()) {
+    nsIPrincipal* documentPrincipal = nullptr;
+    if (XRE_IsParentProcess()) {
+      dom::WindowGlobalParent* wgp = wc->Canonical();
+      if (!wgp) {
+        continue;
+      }
+      documentPrincipal = wgp->DocumentPrincipal();
+    } else {
+      dom::WindowGlobalChild* wgc = wc->GetWindowGlobalChild();
+      if (!wgc) {
+        continue;  // not same-origin.
+      }
+      documentPrincipal = wgc->DocumentPrincipal();
+    }
+
+    if (aDocumentPrincipal->Equals(documentPrincipal)) {
+      return true;
+    }
+
+    // Not strictly equal, special case if both are file: URIs.
+    //
+    // file: URIs are considered the same domain for the purpose of frame
+    // navigation, regardless of script accessibility (bug 420425).
+    if (isFileDocument && isFileScheme(documentPrincipal)) {
+      return true;
+    }
+  }
+
+  // If the target is a top-level document, a frame can navigate it
+  // when the source is allowed to navigate the opener
+  if (aConsiderOpener && !aTarget->GetParent()) {
+    if (RefPtr<dom::BrowsingContext> opener = aTarget->GetOpener()) {
+      return CanNavigate(aSource, opener, aDocumentPrincipal, false);
+    }
+  }
+
+  return false;
+}
+
+// static
 bool nsContentUtils::IsAbsoluteURL(const nsACString& aURL) {
   nsAutoCString scheme;
   if (NS_FAILED(net_ExtractURLScheme(aURL, scheme))) {
@@ -2721,14 +2803,19 @@ bool nsContentUtils::ShouldResistFingerprinting(nsIChannel* aChannel,
     return false;
   }
 
-  nsCOMPtr<nsIPrincipal> resultPrincipal;
-  nsresult rv = sSecurityManager->GetChannelResultPrincipal(
-      aChannel, getter_AddRefs(resultPrincipal));
-  if (NS_SUCCEEDED(rv) && IsPDFJS(resultPrincipal)) {
-    MOZ_LOG(nsContentUtils::ResistFingerprintingLog(), LogLevel::Debug,
-            ("Inside ShouldResistFingerprinting(nsIChannel*)"
-             " PDF.js document exempted"));
-    return false;
+  auto contentType = loadInfo->GetExternalContentPolicyType();
+
+  if (sSecurityManager && (contentType == ExtContentPolicy::TYPE_DOCUMENT ||
+                           contentType == ExtContentPolicy::TYPE_SUBDOCUMENT)) {
+    nsCOMPtr<nsIPrincipal> resultPrincipal;
+    nsresult rv = sSecurityManager->GetChannelResultPrincipal(
+        aChannel, getter_AddRefs(resultPrincipal));
+    if (NS_SUCCEEDED(rv) && IsPDFJS(resultPrincipal)) {
+      MOZ_LOG(nsContentUtils::ResistFingerprintingLog(), LogLevel::Debug,
+              ("Inside ShouldResistFingerprinting(nsIChannel*)"
+               " PDF.js document exempted"));
+      return false;
+    }
   }
 
   if (ETPSaysShouldNotResistFingerprinting(aChannel, loadInfo)) {
@@ -2748,7 +2835,6 @@ bool nsContentUtils::ShouldResistFingerprinting(nsIChannel* aChannel,
   // Document types have no loading principal.  Subdocument types do have a
   // loading principal, but it is the loading principal of the parent
   // document; not the subdocument.
-  auto contentType = loadInfo->GetExternalContentPolicyType();
   // Case 1: Document or Subdocument load
   if (contentType == ExtContentPolicy::TYPE_DOCUMENT ||
       contentType == ExtContentPolicy::TYPE_SUBDOCUMENT) {
@@ -4587,26 +4673,17 @@ nsresult nsContentUtils::ParseQualifiedNameRelaxed(
   const char16_t* begin = aQualifiedName.BeginReading();
   const char16_t* end = aQualifiedName.EndReading();
   const char16_t* firstColon = nullptr;
-  const char16_t* secondColon = nullptr;
 
-  // Find the first and second colons per "strictly split" algorithm.
-  // For "f:o:o", firstColon points to first ':', secondColon to second ':'.
   for (const char16_t* ptr = begin; ptr < end; ptr++) {
     if (*ptr == ':') {
-      if (!firstColon) {
-        firstColon = ptr;
-      } else if (!secondColon) {
-        secondColon = ptr;
-        break;  // We only need the first two colons.
-      }
+      firstColon = ptr;
+      break;
     }
   }
 
   if (firstColon) {
-    // Validate prefix (part before first colon).
     nsDependentSubstring prefix(begin, firstColon);
 
-    // Prefix must not be empty when there's a colon.
     if (prefix.IsEmpty()) {
       return NS_ERROR_DOM_INVALID_CHARACTER_ERR;
     }
@@ -4615,10 +4692,8 @@ nsresult nsContentUtils::ParseQualifiedNameRelaxed(
       return NS_ERROR_DOM_INVALID_CHARACTER_ERR;
     }
 
-    // Local name is between first colon and second colon (or end if no second).
-    // Per "strictly split", we only take the second token as the local name.
-    const char16_t* localNameEnd = secondColon ? secondColon : end;
-    nsDependentSubstring localName(firstColon + 1, localNameEnd);
+    // Local name is everything after the first colon.
+    nsDependentSubstring localName(firstColon + 1, end);
 
     // Local name must not be empty.
     if (localName.IsEmpty()) {
@@ -4640,7 +4715,7 @@ nsresult nsContentUtils::ParseQualifiedNameRelaxed(
       *aColon = firstColon;
     }
     if (aLocalNameEnd) {
-      *aLocalNameEnd = localNameEnd;
+      *aLocalNameEnd = end;
     }
   } else {
     // No colon, the whole string is the local name.
@@ -4695,8 +4770,6 @@ nsresult nsContentUtils::GetNodeInfoFromQName(
   const nsString& qName = PromiseFlatString(aQualifiedName);
   const char16_t* colon;
   const char16_t* localNameEnd;
-  // https://infra.spec.whatwg.org/#strictly-split
-  // requires that for "f:o:o", prefix="f" and localName="o"
   nsresult rv = nsContentUtils::ParseQualifiedNameRelaxed(
       qName, aNodeType, &colon, &localNameEnd);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -4706,7 +4779,6 @@ nsresult nsContentUtils::GetNodeInfoFromQName(
   if (colon) {
     RefPtr<nsAtom> prefix = NS_AtomizeMainThread(Substring(qName.get(), colon));
 
-    // Use localNameEnd (second colon or string end) per "strictly split".
     rv = aNodeInfoManager->GetNodeInfo(Substring(colon + 1, localNameEnd),
                                        prefix, nsID, aNodeType, aNodeInfo);
   } else {
@@ -5115,7 +5187,7 @@ void nsContentUtils::GetEventArgNames(int32_t aNameSpaceID, nsAtom* aEventName,
 
 // Note: The list of content bundles in nsStringBundle.cpp should be updated
 // whenever entries are added or removed from this list.
-static const char* gPropertiesFiles[nsContentUtils::PropertiesFile_COUNT] = {
+static const char* gPropertiesFiles[kPropertiesFileCount] = {
     // Must line up with the enum values in |PropertiesFile| enum.
     "chrome://global/locale/css.properties",
     "chrome://global/locale/xul.properties",
@@ -5139,16 +5211,16 @@ static const char* gPropertiesFiles[nsContentUtils::PropertiesFile_COUNT] = {
 nsresult nsContentUtils::EnsureStringBundle(PropertiesFile aFile) {
   MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread(),
                         "Should not create bundles off main thread.");
-  if (!sStringBundles[aFile]) {
+  if (!sStringBundles[size_t(aFile)]) {
     if (!sStringBundleService) {
       nsresult rv =
           CallGetService(NS_STRINGBUNDLE_CONTRACTID, &sStringBundleService);
       NS_ENSURE_SUCCESS(rv, rv);
     }
     RefPtr<nsIStringBundle> bundle;
-    MOZ_TRY(sStringBundleService->CreateBundle(gPropertiesFiles[aFile],
+    MOZ_TRY(sStringBundleService->CreateBundle(gPropertiesFiles[size_t(aFile)],
                                                getter_AddRefs(bundle)));
-    sStringBundles[aFile] = bundle.forget();
+    sStringBundles[size_t(aFile)] = bundle.forget();
   }
   return NS_OK;
 }
@@ -5167,7 +5239,7 @@ void nsContentUtils::AsyncPrecreateStringBundles() {
   // child is wasteful and unnecessary.
   MOZ_ASSERT(XRE_IsParentProcess());
 
-  for (uint32_t bundleIndex = 0; bundleIndex < PropertiesFile_COUNT;
+  for (size_t bundleIndex = 0; bundleIndex < kPropertiesFileCount;
        ++bundleIndex) {
     nsresult rv = NS_DispatchToCurrentThreadQueue(
         NS_NewRunnableFunction("AsyncPrecreateStringBundles",
@@ -5175,7 +5247,8 @@ void nsContentUtils::AsyncPrecreateStringBundles() {
                                  PropertiesFile file =
                                      static_cast<PropertiesFile>(bundleIndex);
                                  EnsureStringBundle(file);
-                                 nsIStringBundle* bundle = sStringBundles[file];
+                                 nsIStringBundle* bundle =
+                                     sStringBundles[size_t(file)];
                                  bundle->AsyncPreload();
                                }),
         EventQueuePriority::Idle);
@@ -5183,19 +5256,19 @@ void nsContentUtils::AsyncPrecreateStringBundles() {
   }
 }
 
-static nsContentUtils::PropertiesFile GetMaybeSpoofedPropertiesFile(
-    nsContentUtils::PropertiesFile aFile, const char* aKey,
-    Document* aDocument) {
+static PropertiesFile GetMaybeSpoofedPropertiesFile(PropertiesFile aFile,
+                                                    const char* aKey,
+                                                    Document* aDocument) {
   // When we spoof English, use en-US properties in strings that are accessible
   // by content.
   bool spoofLocale = nsContentUtils::ShouldResistFingerprinting(
       aDocument, RFPTarget::JSLocale);
   if (spoofLocale) {
     switch (aFile) {
-      case nsContentUtils::eFORMS_PROPERTIES:
-        return nsContentUtils::eFORMS_PROPERTIES_en_US;
-      case nsContentUtils::eDOM_PROPERTIES:
-        return nsContentUtils::eDOM_PROPERTIES_en_US;
+      case PropertiesFile::FORMS_PROPERTIES:
+        return PropertiesFile::FORMS_PROPERTIES_en_US;
+      case PropertiesFile::DOM_PROPERTIES:
+        return PropertiesFile::DOM_PROPERTIES_en_US;
       default:
         break;
     }
@@ -5231,8 +5304,7 @@ nsresult nsContentUtils::FormatMaybeLocalizedString(
 class FormatLocalizedStringRunnable final : public WorkerMainThreadRunnable {
  public:
   FormatLocalizedStringRunnable(WorkerPrivate* aWorkerPrivate,
-                                nsContentUtils::PropertiesFile aFile,
-                                const char* aKey,
+                                PropertiesFile aFile, const char* aKey,
                                 const nsTArray<nsString>& aParams,
                                 nsAString& aLocalizedString)
       : WorkerMainThreadRunnable(aWorkerPrivate,
@@ -5257,7 +5329,7 @@ class FormatLocalizedStringRunnable final : public WorkerMainThreadRunnable {
   nsresult GetResult() const { return mResult; }
 
  private:
-  const nsContentUtils::PropertiesFile mFile;
+  const PropertiesFile mFile;
   const char* mKey;
   const nsTArray<nsString>& mParams;
   nsresult mResult = NS_ERROR_FAILURE;
@@ -5289,7 +5361,7 @@ nsresult nsContentUtils::FormatLocalizedString(
   }
 
   MOZ_TRY(EnsureStringBundle(aFile));
-  nsIStringBundle* bundle = sStringBundles[aFile];
+  nsIStringBundle* bundle = sStringBundles[size_t(aFile)];
   if (aParams.IsEmpty()) {
     return bundle->GetStringFromName(aKey, aResult);
   }
@@ -5335,7 +5407,7 @@ nsresult nsContentUtils::ReportToConsole(
 /* static */
 void nsContentUtils::ReportEmptyGetElementByIdArg(const Document* aDoc) {
   ReportToConsole(nsIScriptError::warningFlag, "DOM"_ns, aDoc,
-                  nsContentUtils::eDOM_PROPERTIES, "EmptyGetElementByIdParam");
+                  PropertiesFile::DOM_PROPERTIES, "EmptyGetElementByIdParam");
 }
 
 /* static */
@@ -6292,7 +6364,7 @@ static void SetAndFilterHTML(
   if (aSafe && (aContext->IsHTMLElement(nsGkAtoms::script) ||
                 aContext->IsSVGElement(nsGkAtoms::script))) {
     nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "DOM"_ns, doc,
-                                    nsContentUtils::eDOM_PROPERTIES,
+                                    PropertiesFile::DOM_PROPERTIES,
                                     "SetHTMLScript");
     return;
   }
@@ -8181,7 +8253,7 @@ static void ReportPatternCompileFailure(nsAString& aPattern,
   }
 
   nsContentUtils::ReportToConsole(nsIScriptError::errorFlag, "DOM"_ns,
-                                  aDocument, nsContentUtils::eDOM_PROPERTIES,
+                                  aDocument, PropertiesFile::DOM_PROPERTIES,
                                   "PatternAttributeCompileFailurev2", strings);
   savedExc.drop();
 }
@@ -9813,7 +9885,11 @@ Result<bool, nsresult> nsContentUtils::SynthesizeMouseEvent(
           : (msg != eMouseDown
                  ? 0
                  : GetButtonsFlagForButton(aMouseEventData.mButton));
-  mouseOrPointerEvent.mPressure = aMouseEventData.mPressure;
+  // https://w3c.github.io/pointerevents/#dom-pointerevent-pressure.
+  mouseOrPointerEvent.mPressure =
+      aMouseEventData.mPressure.WasPassed()
+          ? aMouseEventData.mPressure.Value()
+          : ((mouseOrPointerEvent.mButtons == 0) ? 0.0f : 0.5f);
   mouseOrPointerEvent.mInputSource = aMouseEventData.mInputSource;
   mouseOrPointerEvent.mClickCount =
       aMouseEventData.mClickCount.WasPassed()
@@ -9945,10 +10021,14 @@ mozilla::Result<bool, nsresult> nsContentUtils::SynthesizeTouchEvent(
         CSSPoint::ToAppUnits(
             CSSPoint(aTouches[i].mRadiiX, aTouches[i].mRadiiY)),
         aPresContext->AppUnitsPerDevPixel());
+    // https://w3c.github.io/pointerevents/#dom-pointerevent-pressure.
+    float pressure = aTouches[i].mPressure.WasPassed()
+                         ? aTouches[i].mPressure.Value()
+                         : (msg == eTouchEnd ? 0.0f : 0.5f);
 
     RefPtr<Touch> t =
-        new Touch(aTouches[i].mIdentifier, pt, radius,
-                  aTouches[i].mRotationAngle, aTouches[i].mPressure);
+        new Touch(CheckedInt<int32_t>(aTouches[i].mIdentifier).value(), pt,
+                  radius, aTouches[i].mRotationAngle, pressure);
     if (aTouches[i].mAltitudeAngle.WasPassed()) {
       MOZ_ASSERT(aTouches[i].mAzimuthAngle.WasPassed());
       t->mAngle.emplace(aTouches[i].mAltitudeAngle.Value(),
@@ -12417,6 +12497,16 @@ nsContentUtils::TryGetBrowserChildGlobal(nsISupports* aFrom) {
 }
 
 /* static */
+Document* nsContentUtils::TryGetDocumentFromWindowGlobal(nsISupports* aFrom) {
+  nsCOMPtr<nsPIDOMWindowInner> window = do_QueryInterface(aFrom);
+  MOZ_DIAGNOSTIC_ASSERT(window, "Expected a window global");
+  if (!window) {
+    return nullptr;
+  }
+  return window->GetExtantDoc();
+}
+
+/* static */
 uint32_t nsContentUtils::InnerOrOuterWindowCreated() {
   MOZ_ASSERT(NS_IsMainThread());
   ++sInnerOrOuterWindowCount;
@@ -13008,7 +13098,7 @@ int32_t nsContentUtils::CompareTreePosition(const nsINode* aNode1,
 
 nsIContent* nsContentUtils::AttachDeclarativeShadowRoot(
     nsIContent* aHost, ShadowRootMode aMode, bool aIsClonable,
-    bool aIsSerializable, bool aDelegatesFocus,
+    bool aIsSerializable, bool aDelegatesFocus, bool aCustomElementRegistry,
     const nsAString& aReferenceTarget) {
   RefPtr<Element> host = mozilla::dom::Element::FromNodeOrNull(aHost);
   if (!host || host->GetShadowRoot()) {

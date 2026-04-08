@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -292,7 +291,7 @@ class AsyncReadbackBufferNLRS
     : public profiler_screenshots::AsyncReadbackBuffer {
  public:
   AsyncReadbackBufferNLRS(gl::GLContext* aGL, const gfx::IntSize& aSize,
-                          GLuint aBufferHandle);
+                          GLuint aBufferHandle, bool aYFlip);
   void CopyFrom(profiler_screenshots::RenderSource* aSource) override;
   bool MapAndCopyInto(gfx::DataSourceSurface* aSurface,
                       const gfx::IntSize& aReadSize) override;
@@ -301,6 +300,7 @@ class AsyncReadbackBufferNLRS
   virtual ~AsyncReadbackBufferNLRS();
   RefPtr<gl::GLContext> mGL;
   GLuint mBufferHandle = 0;
+  bool mYFlip;
 };
 
 }  // namespace layers

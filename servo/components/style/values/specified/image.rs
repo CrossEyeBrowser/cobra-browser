@@ -424,6 +424,10 @@ impl ImageSetItem {
         cors_mode: CorsMode,
         flags: ParseImageFlags,
     ) -> Result<Self, ParseError<'i>> {
+        use style_traits::StyleParseErrorKind;
+        if context.parsing_mode.disallows_urls() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
         let image = match input.try_parse(|i| i.expect_url_or_string()) {
             Ok(url) => Image::Url(SpecifiedUrl::parse_from_string(
                 url.as_ref().into(),
@@ -1291,7 +1295,12 @@ impl PaintWorklet {
             .try_parse(|input| {
                 input.expect_comma()?;
                 input.parse_comma_separated(|input| {
-                    SpecifiedValue::parse(input, &context.url_data).map(Arc::new)
+                    SpecifiedValue::parse(
+                        input,
+                        Some(&context.namespaces.prefixes),
+                        &context.url_data,
+                    )
+                    .map(Arc::new)
                 })
             })
             .unwrap_or_default();

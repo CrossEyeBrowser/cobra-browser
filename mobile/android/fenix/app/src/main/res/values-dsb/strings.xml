@@ -19,6 +19,8 @@
   <string name="content_description_menu">Dalšne nastajenja</string>
   <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
   <string name="content_description_private_browsing">Priwatny modus</string>
+  <!-- Content description (not visible, for screen readers etc.): "Normal Browsing" menu button. -->
+  <string name="content_description_normal_browsing">Normalne pśeglědowanje</string>
   <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
   <string name="search_hint">Pytaś abo adresu zapódaś</string>
   <!-- Placeholder text shown in the search bar before a user enters text for a general engine -->
@@ -314,6 +316,8 @@
   <string name="browser_menu_edit_bookmark">Cytańske znamje wobźěłaś</string>
   <!-- Browser menu label that the saves the currently visited page as a PDF -->
   <string name="browser_menu_save_as_pdf_2">Ako PDF składowaś</string>
+  <!-- Browser menu label for moving the current private tab to a non-private tab -->
+  <string name="browser_menu_move_to_non_private_tab">Do njepriwatnego rejtarika pśesunuś</string>
   <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
   <string name="browser_menu_translate_page_2">Bok pśełožyś</string>
   <!-- Browser menu label for navigating to the summarization feature, which provides site summarization for the current visited page -->
@@ -372,6 +376,8 @@
     %2$s is the name of the language which the page was translated to. (For example: French)
   -->
   <string name="browser_toolbar_translated_successfully">Bok jo se pśełožył z rěcy %1$s do rěcy %2$s.</string>
+  <!-- CFR description for the browser toolbar describing the "Shake to summarize feature" -->
+  <string name="browser_toolbar_summarize_cfr_description">Tśěsćo swój rěd, aby toś ten bok za sekundow zespominał. ⚡️</string>
   <!--
     Translation Toolbar
 
@@ -614,8 +620,12 @@
 
   <!-- "Continue" onboarding button. -->
   <string name="nova_onboarding_continue_button">Dalej</string>
+  <!-- "Continue browsing" onboarding button. -->
+  <string name="nova_onboarding_continue_browsing_button" tools:ignore="UnusedResources">Dalej pśeglědowaś</string>
   <!-- "Not now" onboarding button. -->
   <string name="nova_onboarding_negative_button">Nic něnto</string>
+  <!-- "Skip" onboarding button. -->
+  <string name="nova_onboarding_skip_button" tools:ignore="UnusedResources">Pśeskócyś</string>
   <!-- Terms of use (ToU) onboarding title. -->
   <string name="nova_onboarding_tou_title" tools:ignore="UnusedResources">Pśigótujśo na liche pśeglědowanje</string>
   <!-- Terms of use (ToU) onboarding subtitle. -->
@@ -690,6 +700,27 @@
   <string name="nova_onboarding_add_search_widget_subtitle" tools:ignore="BrandUsage">Zachopśo kužde pytanje ze startoweje wobrazowki swójogo telefona a zgońśo, kak awtomatiski šćit Firefox wam kśebjat zawěsćujo.</string>
   <!-- "Add search widget" onboarding button. 'Firefox' is intentionally hardcoded. -->
   <string name="nova_onboarding_add_search_widget_button" tools:ignore="BrandUsage">Asistent Firefox pśidaś</string>
+  <!-- Customize prompt onboarding title. -->
+  <string name="nova_onboarding_customize_prompt_title" tools:ignore="UnusedResources">Lažko pśiměrjobny a priwatnjejšy z kuždym dotyknjenim</string>
+  <plurals name="nova_onboarding_customize_prompt_body" tools:ignore="UnusedResources">
+    <!--
+      Customize prompt onboarding body.
+      %1$s is replaced by the product name (for example "Firefox"),
+      %2$,d is replaced by the number of trackers blocked. The comma represents the thousand
+      separator (e.g. 1,000 in English), and it will automatically use the correct character
+      for your locale (don't change or remove it).
+    -->
+    <item quantity="one">%1$s jo blokěrował %2$,d pśeslědowak, mjaztym až sćo był we webje pó droze.</item>
+    <item quantity="two">%1$s jo blokěrował %2$,d pśeslědowaka, mjaztym až sćo był we webje pó droze.</item>
+    <item quantity="few">%1$s jo blokěrował %2$,d pśeslědowaki, mjaztym až sćo był we webje pó droze.</item>
+    <item quantity="other">%1$s jo blokěrował %2$,d pśeslědowakow, mjaztym až sćo był we webje pó droze.</item>
+  </plurals>
+  <!-- Customize prompt onboarding positive button. -->
+  <string name="nova_onboarding_customize_prompt_positive_button" tools:ignore="UnusedResources">Zachopśo pśiměrowaś</string>
+  <!-- App icon onboarding title. -->
+  <string name="nova_onboarding_app_icon_prompt_title" tools:ignore="UnusedResources">Wubjeŕśo swójski nałožeński symbol</string>
+  <!-- App icon onboarding body. -->
+  <string name="nova_onboarding_app_icon_prompt_body" tools:ignore="UnusedResources">Dajśo swójej startowej wobrazowce wósobinski raz.</string>
   <!-- ==== End of Project "Nova" onboarding strings ==== -->
 
   <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
@@ -757,6 +788,10 @@
   <string name="preferences_category_about">Wó</string>
   <!-- Preference category for settings related to changing the default search engine -->
   <string name="preferences_category_select_default_search_engine">Wubjeŕśo jadnu</string>
+  <!-- Preference category for settings related to changing the private browsing search engine -->
+  <string name="preferences_category_select_private_search_engine">Standardna pytawa priwatnego modusa</string>
+  <!-- Option to set the private browsing mode to use the normal default search engine -->
+  <string name="search_engine_use_default">Samsku pytnicu kaž w normalnem modusu wužywaś</string>
   <!-- Preference for settings related to managing search shortcuts for the quick search menu -->
   <string name="preferences_manage_search_shortcuts_2">Alternatiwne pytnice zastojaś</string>
   <!-- Summary for preference for settings related to managing search shortcuts for the quick search menu -->
@@ -942,6 +977,8 @@
   <string name="preferences_show_nonsponsored_suggestions">Naraźenja wót %1$s</string>
   <!-- Summary for preference to show Firefox Suggest search suggestions for web content -->
   <string name="preferences_show_nonsponsored_suggestions_summary">Wobstarajśo se naraźenja z weba nastupajucy wašo pytanje</string>
+  <!-- Preference title for switch preference to show search optimization cards -->
+  <string name="preferences_show_search_optimization_cards">Wótwołajśo naraźenja wót Mozilla, gaž pišośo</string>
   <!-- Preference for link sharing -->
   <string name="preferences_link_sharing">Źělenje wótkazow</string>
   <!-- Title for the link sharing toggle. %1$s is replaced by the brand name (e.g. Firefox). -->
@@ -971,6 +1008,15 @@
   <string name="preference_downloads_folder_permission_lost" tools:ignore="UnusedResources">Njamaśo pšawo toś ten zarědnik wužywaś. Wopytajśo drugi wubraś.</string>
   <!-- Preference title for choosing an app to handle downloads -->
   <string name="preferences_choose_app_for_downloads">Ześěgnjenja z drugim nałoženim zastojaś</string>
+  <!-- Preference category for deleting or removing downloads -->
+  <string name="preferences_category_delete_or_remove_downloads">Ześěgnjenja wulašowaś abo wótwónoźeś</string>
+  <string name="preferences_downloads_delete_from_device">Z rěda wulašowaś</string>
+  <string name="preferences_downloads_delete_from_device_description">Dataja jo z wašogo rěda wulašowana a z historije ześěgnjenjow wótwónoźona</string>
+  <string name="preferences_downloads_remove_from_download_history">Z historije ześěgnjenjow wótwónoźeś</string>
+  <string name="preferences_downloads_remove_from_download_history_description">Dataja jo z wašeje historije ześěgnjenjow wótwónoźona, ale jo hyšći na wašom rěźe skłaźona</string>
+  <string name="preferences_downloads_ask_when_to_delete_files">Pšašaś se, gaž dataje lašujom</string>
+  <!-- Preference for downloads -->
+  <string name="preferences_downloads_2">Nastajenja ześěgnjenjow</string>
   <!-- Title for the setting to automatically clean up downloaded files. %s is the name of the app (for example "Firefox"). -->
   <string name="preferences_downloads_settings_clean_up_files_title">Z %s a rěda wulašowaś</string>
   <!-- Summary for the setting to automatically clean up downloaded files -->
@@ -1032,8 +1078,10 @@
   <!--
     Customize Home
 
-    Header text for jumping back into the recent tab in customize the home screen
+    Title for the customize home screen section with privacy report.
   -->
+  <string name="customize_toggle_privacy_report">Rozpšawa priwatnosći</string>
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Slědk skócyś</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Cytańske znamjenja</string>
@@ -1499,12 +1547,8 @@
   <string name="studies_remove">Wótwónoźeś</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Aktiwny</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Testujśo funkcije a ideje, nježli až se za wše wózjawjaju.</string>
   <!-- Description for studies. Note: The word "Firefox" should NOT be translated -->
   <string name="studies_description_4" tools:ignore="BrandUsage">Firefox wužywarje pśipadnje wuběra, aby funkcije testował, což kwalitu za kuždego pólěpšujo.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Studije instalěrowaś a pśewjasć</string>
   <!-- Title of the Studies data preference -->
   <string name="studies_title_2">Funkciske studije dowóliś</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
@@ -1592,6 +1636,8 @@
   <string name="tab_manager_multiselect_menu_item_share">Źěliś</string>
   <!-- Text shown in the multiselect menu for adding selected tabs to collections. -->
   <string name="tab_manager_multiselect_menu_item_add_to_collection">Zběrce pśidaś</string>
+  <!-- Text shown in the multiselect menu for adding selected tabs to a tab group. -->
+  <string name="tab_manager_multiselect_menu_item_add_to_tab_group">Kupce pśidaś</string>
   <!-- Content description for tabs tray multiselect share button -->
   <string name="tab_tray_multiselect_share_content_description" tools:ignore="UnusedResources" moz:removedIn="149">Wubrane rejtariki źěliś</string>
   <!-- Content description for tabs tray multiselect menu -->
@@ -1638,12 +1684,45 @@
     Title for the create tab group bottom sheet
   -->
   <string name="create_tab_group_title">Rejtarikowu kupku napóraś</string>
+  <!-- Title for the edit tab group bottom sheet -->
+  <string name="edit_tab_group_title">Kupku wobźěłaś</string>
   <string name="create_tab_group_save_button">Składowaś</string>
   <string name="edit_tab_group_bottom_sheet_close_content_description">Dialog Kupku rejtarikow wobźěłaś zacyniś</string>
   <!-- Default tab group name when creating a tab group -->
-  <string name="create_tab_group_default_name">Kupka</string>
-  <!-- Label for the tab group name field in the bottom sheet to create a new tab group. -->
+  <string name="create_tab_group_default_name" tools:ignore="UnusedResources" moz:removedIn="150">Kupka</string>
+  <!--
+    Default tab group name when creating a tab group
+    %d is the number of existing tab groups + 1.
+  -->
+  <string name="create_tab_group_form_default_name">Kupka %d</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
   <string name="create_tab_group_name_label">Mě</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
+  <string name="tab_group_name_label" tools:ignore="UnusedResources" moz:removedIn="150">Mě</string>
+  <!-- Title for adding more tabs to a tab group. -->
+  <string name="add_to_tab_group_title">Pśidajśo k</string>
+  <!-- Content Description for closing the "Add to Tab Group" panel. -->
+  <string name="add_to_tab_group_bottom_sheet_close_content_description">Pśidawanje ku kupce rejtarikow zacyniś</string>
+  <!-- Label for adding to a new tab group. -->
+  <string name="add_to_new_tab_group_title">Nowa kupka rejtarikow</string>
+  <plurals name="tab_group_tabs_count_subtitle">
+    <!--
+      Subtitle for the number of tabs in a tab group.
+      %1$d is the number of tabs in a tab group.
+    -->
+    <item quantity="one">%1$d rejtarik</item>
+    <item quantity="two">%1$d rejtarika</item>
+    <item quantity="few">%1$d rejtariki</item>
+    <item quantity="other">%1$d rejtarikow</item>
+  </plurals>
+  <!-- Title for the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_title">Kupku rejtarikow lašowaś?</string>
+  <!-- Text shown in the body of the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_body">To kupku na pśecej wulašujo.</string>
+  <!-- Text shown on the confirm button in the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_confirm">Kupku lašowaś</string>
+  <!-- Text shown on the cancel button in the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_cancel">Pśetergnuś</string>
   <!--
     History
 
@@ -1722,6 +1801,13 @@
     This button will dismiss the dialog.
   -->
   <string name="download_file_has_not_enough_storage_dialog_cancel_button_text">Pśetergnuś</string>
+  <plurals name="downloads_delete_dialog_title">
+    <!-- Title for the download deletion confirmation dialog. The message changes depending on how many files are selected. %d is the number of files to be deleted. -->
+    <item quantity="one">%d dataju lašowaś?</item>
+    <item quantity="two">%d dataji lašowaś?</item>
+    <item quantity="few">%d dataje lašowaś?</item>
+    <item quantity="other">%d datajow lašowaś?</item>
+  </plurals>
   <!-- Text for the button to delete a single downloaded file item -->
   <string name="download_delete_item">Lašowaś</string>
   <!-- Content description for the toolbar "Navigate back" button -->
@@ -1753,6 +1839,14 @@
   <string name="download_delete_multi_select_dialog_confirm">Lašowaś</string>
   <!-- Alert dialog confirmation before deleting multiple download items, this is the negative action. -->
   <string name="download_delete_multi_select_dialog_cancel">Pśetergnuś</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is one of the radio buttons within the dialog box for the user to select. -->
+  <string name="download_delete_dialog_from_device">Z rěda wulašowaś</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is one of the radio buttons within the dialog box for the user to select. -->
+  <string name="download_delete_dialog_from_history">Jano z historije ześěgnjenjow wótwónoźeś</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is the negative action. -->
+  <string name="download_delete_dialog_cancel">Pśetergnuś</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is the positive action. -->
+  <string name="download_delete_dialog_confirm">Wobkšuśiś</string>
   <!-- Title for the alert dialog confirmation before renaming a download item. -->
   <string name="download_rename_dialog_title">Dataju pśemjeniś</string>
   <!-- Label for the name field in the alert dialog confirmation before renaming a download item. -->
@@ -1850,6 +1944,16 @@
   <string name="download_content_type_filter_document">Dokumenty</string>
   <!-- Text for the filter button to show all other file types in the downloads list -->
   <string name="download_content_type_filter_other_1">Druge</string>
+  <!--
+    Title for the alert dialog to rename a file and/or change its download location before downloading it.
+    %s is the formatted size of the file (e.g., "12.5 MB").
+  -->
+  <string name="download_rename_and_change_location_dialog_title">Dataju ześěgnuś?\n(%s)</string>
+  <!--
+    Title for the alert dialog to rename a file and/or change its download location
+    when the file size is not available before downloading it.
+  -->
+  <string name="download_rename_and_change_location_dialog_title_with_unknown_size">Dataju ześěgnuś?</string>
   <!--
     WebCompat Reporter
 
@@ -1978,7 +2082,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Wobźěłaś</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Kopěrowaś</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Kopěrowaś</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Źěliś</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -2034,12 +2138,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">%1$s wulašowany</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">ANULĚROWAŚ</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">ANULĚROWAŚ</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">%s jo wulašowany</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">%s jo wulašowany</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Wulašowane zapiski: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Wulašowane zapiski: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Slědk nawigěrowaś</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Nowy zarědnik pśidaś</string>
@@ -2248,6 +2356,24 @@
   <string name="menu_print">Śišćaś</string>
   <!-- Sub-header in the dialog to share a link to another sync device -->
   <string name="share_device_subheader">Rědoju pósłaś</string>
+  <!-- Content description for the drag handle that dismisses the Send to Device bottom sheet -->
+  <string name="send_to_devices_bottom_sheet_close_content_description">Na rěd pósłaś zacyniś</string>
+  <!-- Text for the QR code action in the native share sheet -->
+  <string name="share_qr_code">QR-kod</string>
+  <!-- Title shown in the QR code display screen -->
+  <string name="qr_code_display_title">QR-kod</string>
+  <!-- Content description for the close button in the QR code display screen -->
+  <string name="qr_code_display_close">Zacyniś</string>
+  <!-- Heading on the QR code display screen -->
+  <string name="qr_code_display_share_nearby">Wótkaz w bliskosći źěliś</string>
+  <!-- Body text on the QR code display screen instructing the user to have others scan the code -->
+  <string name="qr_code_display_instructions">Aby toś ten wótkaz z luźimi w bliskosći źělił, dajśo jim slědujucy QR-kod scannowaś.</string>
+  <!-- Label for the download button on the QR code display screen -->
+  <string name="qr_code_display_download">Ześěgnuś</string>
+  <!-- Toast shown when the QR code is successfully saved to Downloads -->
+  <string name="qr_code_download_success">QR-kod w Ześěgnjenja skłaźony</string>
+  <!-- Toast shown when saving the QR code to Downloads fails -->
+  <string name="qr_code_download_failure">QR-kod njedajo se składowaś</string>
   <!-- Sub-header in the dialog to share a link to an app from the full list -->
   <string name="share_link_all_apps_subheader">Wšykne akcije</string>
   <!-- Sub-header in the dialog to share a link to an app from the most-recent sorted list -->
@@ -2308,23 +2434,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Firefox k wašomu standardnemu wobglědowakej cyniś</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Wopytajśo priwatny modus</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Wopytajśo priwatny modus</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Pśeglědujśo z %1$s bźez skłaźonych cookiejow abo historije</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Pśeglědujśo z %1$s bźez skłaźonych cookiejow abo historije</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Bźez slěda pśeglědowaś</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Bźez slěda pśeglědowaś</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">Priwatny modus waše informacije w %1$s njeskładujo.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">Priwatny modus waše informacije w %1$s njeskładujo.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Startujśo swójo prědne pytanje</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Startujśo swójo prědne pytanje</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Namakajśo něco w bliskosći. Abo namakajśo něco žortnego.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Namakajśo něco w bliskosći. Abo namakajśo něco žortnego.</string>
   <!--
     Survey
 
@@ -2377,8 +2503,6 @@
   <string name="preference_accessibility_text_size_summary">Pówětšćo abo pómjeńšćo tekst na websedłach</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Pismowa wjelikosć</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Awtomatiske pśiměrjenje pismoweje wjelikosći</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2500,6 +2624,19 @@
   <string name="preference_enhanced_tracking_protection_explanation_2">%s was pśed wjele z nejcesćejych pśeslědowakow šćita, kótarež slěduju, což online gótujośo.</string>
   <!-- Text displayed that links to website about enhanced tracking protection -->
   <string name="preference_enhanced_tracking_protection_explanation_learn_more">Dalšne informacije</string>
+  <plurals name="trackers_blocked_count">
+    <!--
+      Trackers blocked card on homepage
+
+      Text shown on the trackers blocked card. %d is the number of trackers blocked.
+    -->
+    <item quantity="one">%d pśeslědowak blokěrowany</item>
+    <item quantity="two">%d pśeslědowaka blokěrowanej</item>
+    <item quantity="few">%d pśeslědowaki blokěrowane</item>
+    <item quantity="other">%d pśeslědowakow blokěrowane</item>
+  </plurals>
+  <!-- Text shown on the trackers blocked card when no trackers have been blocked yet -->
+  <string name="trackers_blocked_empty">Sćo šćitany</string>
   <!-- Preference for enhanced tracking protection for the standard protection settings -->
   <string name="preference_enhanced_tracking_protection_standard_default_1">Standard</string>
   <!-- Preference description for enhanced tracking protection for the standard protection settings -->
@@ -3310,6 +3447,8 @@
     Header text for a section on the home screen.
   -->
   <string name="pocket_stories_header_2">Tšojenja</string>
+  <!-- Header text for the Stories screen. -->
+  <string name="stories_screen_text_news">Nowosći</string>
   <!--
     Context description text for the "Discover more" button in the stories home screen section
     which navigates the user to a screen displaying more stories.
@@ -3402,7 +3541,9 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">Rěcy njedaju se zacytaś. Pśeglědajśo swój internetny zwisk a wopytajśo hyšći raz.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">%1$s bóžko hyšći njepódpěramy.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">%1$s bóžko hyšći njepódpěramy.</string>
+  <!-- The title of the warning card informs the user that translations from a language are not supported yet. %1$s is the name of the source language. -->
+  <string name="translation_error_language_not_supported_warning_text_2">Bóžko pśełožki z rěcy %1$s hyšći njepódpěramy.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">Pśełožujo se…</string>
   <!--
@@ -3726,6 +3867,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Priwatnym rejtarikam pśidaś</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 
@@ -3764,6 +3907,16 @@
   <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">Pytanje w Firefox njewužywam</string>
   <!-- Option for likert scale -->
   <string name="likert_scale_option_8" tools:ignore="UnusedResources">Synchronizaciju njewužywam</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_slow_or_buggy" tools:ignore="UnusedResources">Jo pómały abo ze zmólkami</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_features_hard_to_find_or_missing" tools:ignore="UnusedResources">Funkcije daju se śěžko namakaś abo feluju</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_confusing_or_hard_to_use" tools:ignore="UnusedResources">Jo muśecy abo dajo se śěžko wužywaś</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_its_okay" tools:ignore="UnusedResources">Jo w pórědku, ale njejo lěpšy ako druge wobglědowaki</string>
+  <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+  <string name="likert_scale_option_i_plan_to_keep_using" tools:ignore="BrandUsage,UnusedResources">Mam wótglěd, Firefox dalej wužywaś</string>
   <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">Pomagajśo śišćanje w Firefox pólěpšyś. Trajo jano sekundu</string>
   <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
@@ -3778,6 +3931,8 @@
   <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Kak spokojom sćo z pytanim w Firefox?</string>
   <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">Kak spokojom sćo ze synchronizaciju w Firefox?</string>
+  <!-- Text shown in the survey title for 'describe your experience so far' microsurvey. Note: The word "Firefox" should NOT be translated. -->
+  <string name="microsurvey_describe_your_experience_title" tools:ignore="BrandUsage,UnusedResources">Pomagajśo nam Firefox pólěpšowaś. Kak dajo se waše dotychměstne dožywjenje nejlěpjej wopisowaś?</string>
   <!--
     Accessibility
 

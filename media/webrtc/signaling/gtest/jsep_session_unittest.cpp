@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -4448,12 +4446,98 @@ TEST_F(JsepSessionTest, TestAnswererIndicatingIceRestart) {
   std::string reanswer = CreateAnswer();
 
   // change the ice pwd and ufrag
-  ReplaceInSdp(&reanswer, "a=ice-ufrag:", "a=ice-ufrag:bad-");
-  ReplaceInSdp(&reanswer, "a=ice-pwd:", "a=ice-pwd:bad-");
+  ReplaceInSdp(&reanswer, "a=ice-ufrag:", "a=ice-ufrag:XXXX");
+  ReplaceInSdp(&reanswer, "a=ice-pwd:", "a=ice-pwd:XXXX");
   SetLocalAnswer(reanswer, CHECK_SUCCESS);
   JsepSession::Result result =
       mSessionOff->SetRemoteDescription(kJsepSdpAnswer, reanswer);
   ASSERT_EQ(dom::PCError::InvalidAccessError, *result.mError);
+}
+
+TEST_F(JsepSessionTest, TestIceRolePersistedOnIceRestart) {
+  AddTracks(*mSessionOff, "audio");
+  AddTracks(*mSessionAns, "audio");
+  OfferAnswer(CHECK_SUCCESS);
+
+  ASSERT_TRUE(mSessionOff->IsIceControlling());
+  ASSERT_FALSE(mSessionAns->IsIceControlling());
+
+  // Now the answerer initiates the ICE restart (becomes the offerer).
+  JsepOfferOptions iceRestartOptions;
+  iceRestartOptions.mIceRestart = Some(true);
+  SwapOfferAnswerRoles();
+  OfferAnswer(CHECK_SUCCESS, Some(iceRestartOptions));
+
+  // ICE roles must not have changed despite the offerer/answerer swap.
+  ASSERT_FALSE(mSessionOff->IsIceControlling());
+  ASSERT_TRUE(mSessionAns->IsIceControlling());
+}
+
+TEST_F(JsepSessionTest, TestAnswererIsControllingWhenRemoteIsIceLite) {
+  AddTracks(*mSessionOff, "audio");
+  AddTracks(*mSessionAns, "audio");
+  std::string offer = CreateOffer();
+  SetLocalOffer(offer, CHECK_SUCCESS);
+
+  UniquePtr<Sdp> parsedOffer(Parse(offer));
+  parsedOffer->GetAttributeList().SetAttribute(
+      new SdpFlagAttribute(SdpAttribute::kIceLiteAttribute));
+  std::ostringstream os;
+  parsedOffer->Serialize(os);
+  std::string iceLiteOffer = os.str();
+
+  SetRemoteOffer(iceLiteOffer, CHECK_SUCCESS);
+
+  // ICE role doesn't change until negotiation is complete.
+  ASSERT_FALSE(mSessionAns->IsIceControlling());
+
+  std::string answer = CreateAnswer();
+  SetLocalAnswer(answer, CHECK_SUCCESS);
+
+  // Answerer (full agent) must be controlling when remote is ICE-lite.
+  ASSERT_TRUE(mSessionAns->IsIceControlling());
+}
+
+TEST_F(JsepSessionTest, TestIceRoleUpdatedWhenRemoteSwitchesToIceLite) {
+  AddTracks(*mSessionOff, "audio");
+  AddTracks(*mSessionAns, "audio");
+  OfferAnswer(CHECK_SUCCESS);
+
+  // After initial negotiation: offerer is controlling, answerer is controlled.
+  ASSERT_TRUE(mSessionOff->IsIceControlling());
+  ASSERT_FALSE(mSessionAns->IsIceControlling());
+
+  // ICE restart: offerer sends reoffer claiming ICE-lite.
+  JsepOfferOptions iceRestartOptions;
+  iceRestartOptions.mIceRestart = Some(true);
+  std::string reoffer;
+  JsepSession::Result result =
+      mSessionOff->CreateOffer(iceRestartOptions, &reoffer);
+  ASSERT_FALSE(result.mError.isSome());
+
+  UniquePtr<Sdp> parsedReoffer(Parse(reoffer));
+  parsedReoffer->GetAttributeList().SetAttribute(
+      new SdpFlagAttribute(SdpAttribute::kIceLiteAttribute));
+  std::ostringstream os;
+  parsedReoffer->Serialize(os);
+  std::string iceLiteReoffer = os.str();
+
+  result = mSessionAns->SetRemoteDescription(kJsepSdpOffer, iceLiteReoffer);
+  ASSERT_FALSE(result.mError.isSome());
+
+  // ICE role doesn't change until negotiation is complete.
+  ASSERT_FALSE(mSessionAns->IsIceControlling());
+
+  std::string reanswer;
+  result = mSessionAns->CreateAnswer(JsepAnswerOptions(), &reanswer);
+  ASSERT_FALSE(result.mError.isSome());
+
+  result = mSessionAns->SetLocalDescription(kJsepSdpAnswer, reanswer);
+  ASSERT_FALSE(result.mError.isSome());
+
+  // The formerly-controlled answerer (full) must now be controlling because
+  // the remote controlling agent switched from full to ICE-lite.
+  ASSERT_TRUE(mSessionAns->IsIceControlling());
 }
 
 TEST_F(JsepSessionTest, TestExtmap) {
@@ -4656,8 +4740,8 @@ TEST_F(JsepSessionTest, TestExtmapZeroId) {
       "v=0\r\n"
       "o=- 6 2 IN IP4 1r\r\n"
       "t=0 0a\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -4682,8 +4766,8 @@ TEST_F(JsepSessionTest, TestExtmapInvalidId) {
       "v=0\r\n"
       "o=- 6 2 IN IP4 1r\r\n"
       "t=0 0a\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -4708,8 +4792,8 @@ TEST_F(JsepSessionTest, TestExtmapDuplicateId) {
       "v=0\r\n"
       "o=- 6 2 IN IP4 1r\r\n"
       "t=0 0a\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -4733,8 +4817,8 @@ TEST_F(JsepSessionTest, TestNegotiatedExtmapStability) {
       "v=0\r\n"
       "o=- 6 2 IN IP4 1r\r\n"
       "t=0 0a\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -4819,8 +4903,8 @@ TEST_F(JsepSessionTest, TestNegotiatedExtmapCollision) {
       "v=0\r\n"
       "o=- 6 2 IN IP4 1r\r\n"
       "t=0 0a\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -7724,8 +7808,8 @@ TEST_F(JsepSessionTest, TestTransportAttributeValidation) {
       "a=group:BUNDLE audio video\r\n"
       "m=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
       "c=IN IP4 51.81.107.13\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -7742,8 +7826,8 @@ TEST_F(JsepSessionTest, TestTransportAttributeValidation) {
       "a=rtpmap:100 VP8/90000\r\n"
       "a=extmap:1 urn:ietf:params:rtp-hdrext:toffset\r\n"
       "a=mid:video\r\n"
-      "a=ice-ufrag:Xp\r\n"
-      "a=ice-pwd:he\r\n"
+      "a=ice-ufrag:XpXX\r\n"
+      "a=ice-pwd:AAAA+BBBB+CCCC+DDDD+EE\r\n"
       "a=setup:actpass\r\n"
       "a=fingerprint:sha-256 "
       "DC:FC:25:56:2B:88:77:2F:E4:FA:97:4E:2E:F1:D6:34:A6:A0:11:E2:E4:38:B3:98:"
@@ -7997,9 +8081,9 @@ TEST_F(JsepSessionTest, NoExtmapAllowMixedInDatachannel) {
   mSessionAns->CreateAnswer(JsepAnswerOptions(), &answer);
 
   ASSERT_EQ(std::string::npos, offer.find("a=extmap-allow-mixed"))
-    << "Data channel msection should not contain a=extmap-allow-mixed";
+      << "Data channel msection should not contain a=extmap-allow-mixed";
   ASSERT_EQ(std::string::npos, answer.find("a=extmap-allow-mixed"))
-    << "Data channel msection should not contain a=extmap-allow-mixed";
+      << "Data channel msection should not contain a=extmap-allow-mixed";
 }
 
 }  // namespace mozilla

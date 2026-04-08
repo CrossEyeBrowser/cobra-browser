@@ -6,9 +6,9 @@
 // about-translations.mjs is running in an unprivileged context, and these injected functions
 // allow for the page to get access to additional privileged features.
 
-/* global AT_getAppLocale, AT_getSupportedLanguages, AT_log, AT_getScriptDirection,
+/* global AT_getAppLocaleAsBCP47, AT_getSupportedLanguages, AT_log, AT_getScriptDirection,
    AT_getDisplayName, AT_logError, AT_createTranslationsPort, AT_isHtmlTranslation,
-   AT_isTranslationEngineSupported, AT_isInAutomation, AT_identifyLanguage,
+   AT_isTranslationEngineSupported, AT_isInAutomation, AT_identifyLanguage, AT_clearSourceText,
    AT_telemetry, AT_isEnabledStateManagedByPolicy, AT_enableTranslationsFeature */
 
 import { Translator } from "chrome://global/content/translations/Translator.mjs";
@@ -32,6 +32,16 @@ window.THROTTLE_DELAY = 200;
  * Applying this on the window allows tests to override the delay milliseconds for debounced input handling.
  */
 window.DEBOUNCE_DELAY = 400;
+
+/**
+ * This is the delay for throttling translation-request telemetry in about:translations.
+ *
+ * These events will trigger at most once per interval, unless the throttle
+ * is manually reset by context changes (e.g. source clear or language change).
+ *
+ * Applying this on the window allows tests to override the delay milliseconds.
+ */
+window.TRANSLATION_REQUEST_TELEMETRY_THROTTLE_DELAY = 5_000;
 
 /**
  * This is the default duration, in milliseconds, that the copy button remains
@@ -172,6 +182,27 @@ class AboutTranslations {
    * @type {number | null}
    */
   #copyButtonResetTimeoutId = null;
+
+  /**
+   * A timeout id for throttling translation-request telemetry.
+   *
+   * @type {number | null}
+   */
+  #translationRequestTelemetryThrottleTimeoutId = null;
+
+  /**
+   * The word-count segmenter for the current source language.
+   *
+   * @type {Intl.Segmenter | null}
+   */
+  #wordCountSegmenter = null;
+
+  /**
+   * The language tag of the current word-count segmenter.
+   *
+   * @type {string}
+   */
+  #wordCountSegmenterLanguageTag = "";
 
   /**
    * An optional delay override for resetting the copy button.
@@ -580,7 +611,7 @@ class AboutTranslations {
     );
     sourceLanguageSelector.addEventListener(
       "change",
-      this.#onSourceLanguageInput
+      this.#onSourceLanguageChange
     );
     detectedLanguageUnsupportedMessage.addEventListener(
       "pointerdown",
@@ -598,7 +629,7 @@ class AboutTranslations {
     swapLanguagesButton.addEventListener("click", this.#onSwapLanguagesButton);
     targetLanguageSelector.addEventListener(
       "change",
-      this.#onTargetLanguageInput
+      this.#onTargetLanguageChange
     );
     translationErrorButton.addEventListener(
       "click",
@@ -627,6 +658,7 @@ class AboutTranslations {
   #onUnblockFeatureButton = async () => {
     const { unblockFeatureButton } = this.elements;
     unblockFeatureButton.setAttribute("disabled", "true");
+    AT_telemetry("onUnblockFeature");
 
     try {
       await AT_enableTranslationsFeature();
@@ -655,15 +687,17 @@ class AboutTranslations {
     }
 
     event.preventDefault();
-    this.#setSourceText("");
-    this.#maybeUpdateDetectedSourceLanguage();
-    this.elements.sourceSectionTextArea.focus();
+    this.#clearSourceText();
+
+    AT_telemetry("onClearSourceTextButton");
   };
 
   /**
    * Handles clicks on the swap-languages button.
    */
   #onSwapLanguagesButton = () => {
+    AT_telemetry("onSwapButton");
+    this.#clearTranslationRequestTelemetryThrottle();
     this.#disableSwapLanguagesButton();
     this.#maybeSwapLanguages();
     this.#updateURLFromUI();
@@ -673,18 +707,25 @@ class AboutTranslations {
   /**
    * Handles change events on the source-language selector.
    */
-  #onSourceLanguageInput = () => {
+  #onSourceLanguageChange = () => {
     const { sourceLanguageSelector } = this.elements;
+    const previouslyDetectedLanguageWasExplicitlySelected =
+      sourceLanguageSelector.value === this.#detectedLanguage;
 
-    if (sourceLanguageSelector.value !== this.#detectedLanguage) {
-      this.#resetDetectLanguageOptionText();
-      this.#disableSwapLanguagesButton();
-    } else {
-      this.#resetDetectLanguageOptionText();
+    this.#updateURLFromUI();
+    this.#resetDetectLanguageOptionText();
+    this.#clearTranslationRequestTelemetryThrottle();
+
+    if (previouslyDetectedLanguageWasExplicitlySelected) {
+      // This represents the case where we were previously on the "Detect language"
+      // dropdown menu item and, for example, Spanish was detected, but the user has
+      // now updated the source-language select to the explicit "Spanish" menu item.
+      // In this case, the effectively selected language tag remains the same.
       return;
     }
 
-    this.#updateURLFromUI();
+    this.#disableSwapLanguagesButton();
+    this.#updateSourceScriptDirection();
     this.#maybeRequestTranslation({ allowFromErrorState: true });
     this.#updateDetectedLanguageUnsupportedMessage();
   };
@@ -692,7 +733,8 @@ class AboutTranslations {
   /**
    * Handles change events on the target-language selector.
    */
-  #onTargetLanguageInput = () => {
+  #onTargetLanguageChange = () => {
+    this.#clearTranslationRequestTelemetryThrottle();
     this.#disableSwapLanguagesButton();
     this.#updateURLFromUI();
     this.#maybeRequestTranslation({ allowFromErrorState: true });
@@ -736,6 +778,7 @@ class AboutTranslations {
    * Handles retry clicks from the translation error message.
    */
   #onTranslationErrorRetry = () => {
+    AT_telemetry("onTryAgainButton");
     this.#maybeRequestTranslation({ allowFromErrorState: true });
   };
 
@@ -763,6 +806,7 @@ class AboutTranslations {
       return;
     }
 
+    AT_telemetry("onCopyButton");
     this.#showCopyButtonCopiedState();
   };
 
@@ -961,6 +1005,10 @@ class AboutTranslations {
     }
 
     messageBar.hidden = !visible;
+    if (visible) {
+      this.#recordTopLevelMessageBarTelemetry(messageBar);
+    }
+
     const eventNames =
       this.#getTopLevelMessageBarVisibilityEventNames(messageBar);
     if (!eventNames) {
@@ -968,6 +1016,44 @@ class AboutTranslations {
     }
 
     dispatchTestEvent(visible ? eventNames.shown : eventNames.hidden);
+  }
+
+  /**
+   * Records telemetry when a top-level message bar is shown.
+   *
+   * @param {HTMLElement} messageBar
+   */
+  #recordTopLevelMessageBarTelemetry(messageBar) {
+    const {
+      unsupportedInfoMessage,
+      policyDisabledInfoMessage,
+      languageLoadErrorMessage,
+      featureBlockedInfoMessage,
+    } = this.elements;
+
+    switch (messageBar) {
+      case unsupportedInfoMessage: {
+        AT_telemetry("onUnsupportedInfoMessage");
+        return;
+      }
+      case policyDisabledInfoMessage: {
+        AT_telemetry("onPolicyDisabledInfoMessage");
+        return;
+      }
+      case languageLoadErrorMessage: {
+        AT_telemetry("onLanguageLoadErrorMessage");
+        return;
+      }
+      case featureBlockedInfoMessage: {
+        AT_telemetry("onFeatureBlockedInfoMessage");
+        return;
+      }
+      default: {
+        AT_logError(
+          `Unexpected top-level message bar for telemetry: ${messageBar.id || "<no-id>"}`
+        );
+      }
+    }
   }
 
   /**
@@ -1069,23 +1155,27 @@ class AboutTranslations {
       detectedLanguageUnsupportedHeading,
       detectedLanguageUnsupportedMessage,
     } = this.elements;
+    const wasHidden = detectedLanguageUnsupportedMessage.hidden;
 
     const languageLabel =
       this.#detectedLanguageDisplayName || this.#detectedLanguage;
     if (languageLabel) {
       document.l10n.setAttributes(
         detectedLanguageUnsupportedHeading,
-        "about-translations-detected-language-unsupported-heading",
+        "about-translations-detected-language-unsupported-heading-2",
         { language: languageLabel }
       );
     } else {
       document.l10n.setAttributes(
         detectedLanguageUnsupportedHeading,
-        "about-translations-detected-language-unsupported-heading-unknown"
+        "about-translations-detected-language-unsupported-heading-unknown-2"
       );
     }
 
     detectedLanguageUnsupportedMessage.hidden = false;
+    if (wasHidden) {
+      this.#recordUnsupportedLanguageMessageTelemetry();
+    }
     this.#requestSectionHeightsUpdate({ scheduleCallback: false });
     document.l10n
       .translateFragment(detectedLanguageUnsupportedMessage)
@@ -1116,6 +1206,7 @@ class AboutTranslations {
       return;
     }
 
+    this.#clearTranslationRequestTelemetryThrottle();
     targetSection.classList.add("has-translation-error");
     translationErrorMessage.hidden = false;
     this.#disableSwapLanguagesButton();
@@ -1156,6 +1247,41 @@ class AboutTranslations {
   }
 
   /**
+   * Splits a language-tag key into its language tag and optional variant.
+   *
+   * @param {string} languageTagKey
+   * @returns {{ languageTag: string, variant: string | undefined }}
+   */
+  #splitLanguageTagKey(languageTagKey) {
+    const [languageTag = "", variant] = languageTagKey.split(",");
+    return { languageTag, variant };
+  }
+
+  /**
+   * Returns the currently selected or detected source language tag.
+   * Returns an empty string if no language is selected or detected.
+   *
+   * @returns {string}
+   */
+  #getSelectedSourceLanguageTag() {
+    const selectedSourceLanguage = this.#isDetectLanguageSelected()
+      ? this.#detectedLanguage
+      : this.elements.sourceLanguageSelector.value;
+    return this.#splitLanguageTagKey(selectedSourceLanguage).languageTag;
+  }
+
+  /**
+   * Returns the currently selected target language tag.
+   * Returns an empty string if no language is selected.
+   *
+   * @returns {string}
+   */
+  #getSelectedTargetLanguageTag() {
+    return this.#splitLanguageTagKey(this.elements.targetLanguageSelector.value)
+      .languageTag;
+  }
+
+  /**
    * Returns the language pair formed by the values of the language selectors.
    * Returns null if one or more of the selectors has no selected value.
    *
@@ -1171,9 +1297,10 @@ class AboutTranslations {
       selectedSourceLanguage = sourceLanguageSelector.value;
     }
 
-    const [sourceLanguage, sourceVariant] = selectedSourceLanguage.split(",");
-    const [targetLanguage, targetVariant] =
-      targetLanguageSelector.value.split(",");
+    const { languageTag: sourceLanguage, variant: sourceVariant } =
+      this.#splitLanguageTagKey(selectedSourceLanguage);
+    const { languageTag: targetLanguage, variant: targetVariant } =
+      this.#splitLanguageTagKey(targetLanguageSelector.value);
 
     if (sourceLanguage === "" || targetLanguage === "") {
       // At least one selector is empty, so we cannot create a language pair.
@@ -1235,25 +1362,18 @@ class AboutTranslations {
     const previousDetectedLanguage = this.#detectedLanguage;
     this.#detectedLanguage = detectedLanguage;
 
-    const { sourceSectionTextArea } = this.elements;
-
     if (detectedLanguage) {
       const displayName = await AT_getDisplayName(detectedLanguage);
       this.#detectedLanguageDisplayName = displayName;
       this.#populateDetectLanguageOption({ detectedLanguage, displayName });
-      sourceSectionTextArea.setAttribute(
-        "dir",
-        AT_getScriptDirection(detectedLanguage)
-      );
     } else {
       this.#resetDetectLanguageOptionText();
-      sourceSectionTextArea.setAttribute(
-        "dir",
-        AT_getScriptDirection(AT_getAppLocale())
-      );
     }
 
+    this.#updateSourceScriptDirection();
+
     if (previousDetectedLanguage !== detectedLanguage) {
+      this.#clearTranslationRequestTelemetryThrottle();
       dispatchTestEvent("AboutTranslationsTest:DetectedLanguageUpdated", {
         language: detectedLanguage,
       });
@@ -1539,6 +1659,17 @@ class AboutTranslations {
   }
 
   /**
+   * Clears translation-request telemetry throttling for automated tests.
+   */
+  testClearTranslationRequestTelemetryThrottle() {
+    if (!AT_isInAutomation()) {
+      throw new Error("Test-only function called outside of automation.");
+    }
+
+    this.#clearTranslationRequestTelemetryThrottle();
+  }
+
+  /**
    * If the currently selected language pair is determined to be swappable,
    * swaps the active source language with the active target language,
    * and moves the translated output to be the new source text.
@@ -1622,6 +1753,135 @@ class AboutTranslations {
   }
 
   /**
+   * Returns the configured throttle delay for translation-request telemetry.
+   *
+   * @returns {number}
+   */
+  #getTranslationRequestTelemetryThrottleDelay() {
+    const delay = Number(window.TRANSLATION_REQUEST_TELEMETRY_THROTTLE_DELAY);
+    return Number.isFinite(delay) && delay >= 0 ? delay : 5_000;
+  }
+
+  /**
+   * Clears the active translation-request telemetry throttle timer.
+   */
+  #clearTranslationRequestTelemetryThrottle() {
+    if (this.#translationRequestTelemetryThrottleTimeoutId !== null) {
+      clearTimeout(this.#translationRequestTelemetryThrottleTimeoutId);
+      this.#translationRequestTelemetryThrottleTimeoutId = null;
+    }
+  }
+
+  /**
+   * Determines whether translation-request telemetry should be recorded now.
+   *
+   * @returns {boolean}
+   */
+  #shouldRecordTranslationRequestTelemetry() {
+    if (this.#translationRequestTelemetryThrottleTimeoutId !== null) {
+      return false;
+    }
+
+    this.#translationRequestTelemetryThrottleTimeoutId = setTimeout(() => {
+      this.#translationRequestTelemetryThrottleTimeoutId = null;
+    }, this.#getTranslationRequestTelemetryThrottleDelay());
+
+    return true;
+  }
+
+  /**
+   * Counts the words in the text for the given language tag.
+   *
+   * @param {string} text - The text for which to count words.
+   * @param {string | null} [languageTag=null] - An optional BCP-47 language tag.
+   *
+   * @returns {number | null} The count of words in the text, or null when no language tag is available.
+   */
+  #countWords(text, languageTag = null) {
+    if (!languageTag) {
+      return null;
+    }
+
+    let segmenter = this.#wordCountSegmenter;
+
+    if (
+      // We have not yet cached a word segmenter.
+      !segmenter ||
+      // Our cached segmenter no longer matches the source language.
+      this.#wordCountSegmenterLanguageTag !== languageTag
+    ) {
+      segmenter = new Intl.Segmenter(languageTag, { granularity: "word" });
+      this.#wordCountSegmenter = segmenter;
+      this.#wordCountSegmenterLanguageTag = languageTag;
+    }
+
+    const segments = Array.from(segmenter.segment(text));
+    return segments.filter(segment => segment.isWordLike).length;
+  }
+
+  /**
+   * Records a translation-request telemetry event when the throttle allows it.
+   *
+   * @param {object} data
+   * @param {string} data.sourceLanguage
+   * @param {string} data.targetLanguage
+   * @param {string} data.sourceText
+   */
+  async #maybeRecordTranslationRequestTelemetry({
+    sourceLanguage,
+    targetLanguage,
+    sourceText,
+  }) {
+    if (!this.#shouldRecordTranslationRequestTelemetry()) {
+      return;
+    }
+
+    let sourceTextWordCount;
+    try {
+      sourceTextWordCount = this.#countWords(sourceText, sourceLanguage);
+    } catch (error) {
+      AT_logError(error);
+    }
+
+    try {
+      AT_telemetry("onTranslate", {
+        autoTranslate: false,
+        sourceLanguage,
+        targetLanguage,
+        sourceTextCodeUnits: sourceText.length,
+        sourceTextWordCount,
+      });
+    } catch (error) {
+      AT_logError(error);
+    }
+  }
+
+  /**
+   * Records an unsupported-language-message telemetry event.
+   */
+  #recordUnsupportedLanguageMessageTelemetry() {
+    const sourceText = this.#getSourceText();
+    const detectedLanguage = this.#detectedLanguage;
+
+    let sourceTextWordCount;
+    try {
+      sourceTextWordCount = this.#countWords(sourceText, detectedLanguage);
+    } catch (error) {
+      AT_logError(error);
+    }
+
+    try {
+      AT_telemetry("onUnsupportedLanguageMessage", {
+        detectedLanguage,
+        sourceTextCodeUnits: sourceText.length,
+        sourceTextWordCount,
+      });
+    } catch (error) {
+      AT_logError(error);
+    }
+  }
+
+  /**
    * Shows or hides the source clear button based on whether the textarea has text.
    */
   #updateSourceSectionClearButtonVisibility() {
@@ -1643,6 +1903,15 @@ class AboutTranslations {
   }
 
   /**
+   * Clears the content in the source-section text area.
+   */
+  #clearSourceText() {
+    AT_clearSourceText();
+    this.elements.sourceSectionTextArea.focus();
+    dispatchTestEvent("AboutTranslationsTest:ClearSourceText");
+  }
+
+  /**
    * Sets the value of the source <textarea> and dispatches an input event.
    *
    * @param {string} value
@@ -1659,6 +1928,7 @@ class AboutTranslations {
     this.#requestSectionHeightsUpdate({ scheduleCallback: false });
 
     if (!value && hadValueBefore) {
+      this.#clearTranslationRequestTelemetryThrottle();
       dispatchTestEvent("AboutTranslationsTest:ClearSourceText");
     }
 
@@ -1718,11 +1988,9 @@ class AboutTranslations {
 
     this.#setTargetText(this.#translatingPlaceholderText);
     this.#disableSwapLanguagesButton();
-
-    targetSectionTextArea.setAttribute(
-      "dir",
-      AT_getScriptDirection(AT_getAppLocale())
-    );
+    this.#updateTextAreaAttributes(targetSectionTextArea, {
+      languageTag: AT_getAppLocaleAsBCP47(),
+    });
 
     dispatchTestEvent("AboutTranslationsTest:ShowTranslatingPlaceholder");
   }
@@ -1759,6 +2027,8 @@ class AboutTranslations {
     const targetLanguage = urlParams.get("trg");
     const sourceText = urlParams.get("text") ?? "";
     const { sourceLanguageSelector, targetLanguageSelector } = this.elements;
+    const previousSourceLanguage = sourceLanguageSelector.value;
+    const previousTargetLanguage = targetLanguageSelector.value;
 
     sourceLanguageSelector.value = "detect";
     targetLanguageSelector.value = "";
@@ -1778,6 +2048,13 @@ class AboutTranslations {
       )
     ) {
       targetLanguageSelector.value = targetLanguage;
+    }
+
+    if (
+      sourceLanguageSelector.value !== previousSourceLanguage ||
+      targetLanguageSelector.value !== previousTargetLanguage
+    ) {
+      this.#clearTranslationRequestTelemetryThrottle();
     }
 
     this.#setSourceText(sourceText);
@@ -1828,48 +2105,67 @@ class AboutTranslations {
   }
 
   /**
-   * Sets the text direction ("dir" attribute) of the source text area
-   * based on its content and the currently selected source language.
+   * Updates a textarea's `dir` and `lang` attributes according to the provided language tag.
+   *
+   * The `dir` attribute is always derived and set from the provided language tag,
+   * however there are cases in which we may want to remove the `lang` attribute
+   * from the textarea, rather than populate it with the tag's value.
+   *
+   * @param {HTMLTextAreaElement} textArea
+   * @param {object} config
+   * @param {string} config.languageTag
+   * @param {boolean} [config.removeLangAttribute=false]
    */
-  #updateSourceScriptDirection() {
-    const appLocale = AT_getAppLocale();
-    const selectedLanguagePair = this.#getSelectedLanguagePair();
-    const selectedSourceLanguage = selectedLanguagePair?.sourceLanguage;
-    const { sourceSectionTextArea } = this.elements;
+  #updateTextAreaAttributes(
+    textArea,
+    { languageTag, removeLangAttribute = false }
+  ) {
+    textArea.setAttribute("dir", AT_getScriptDirection(languageTag));
 
-    if (selectedSourceLanguage && sourceSectionTextArea.value) {
-      sourceSectionTextArea.setAttribute(
-        "dir",
-        AT_getScriptDirection(selectedSourceLanguage)
-      );
+    if (removeLangAttribute) {
+      textArea.removeAttribute("lang");
     } else {
-      sourceSectionTextArea.setAttribute(
-        "dir",
-        AT_getScriptDirection(appLocale)
-      );
+      textArea.setAttribute("lang", languageTag);
     }
   }
 
   /**
-   * Sets the text direction ("dir" attribute) of the target text area
-   * based on its content and the currently selected target language.
+   * Sets the source text area's `dir` and `lang` attributes based on its
+   * content and the currently selected source language.
+   */
+  #updateSourceScriptDirection() {
+    const selectedSourceLanguage = this.#getSelectedSourceLanguageTag();
+    const { sourceSectionTextArea } = this.elements;
+
+    if (selectedSourceLanguage && sourceSectionTextArea.value) {
+      this.#updateTextAreaAttributes(sourceSectionTextArea, {
+        languageTag: selectedSourceLanguage,
+      });
+    } else {
+      this.#updateTextAreaAttributes(sourceSectionTextArea, {
+        languageTag: AT_getAppLocaleAsBCP47(),
+        removeLangAttribute: true,
+      });
+    }
+  }
+
+  /**
+   * Sets the target text area's `dir` and `lang` attributes based on its
+   * content and the currently selected target language.
    */
   #updateTargetScriptDirection() {
-    const appLocale = AT_getAppLocale();
-    const selectedLanguagePair = this.#getSelectedLanguagePair();
-    const selectedTargetLanguage = selectedLanguagePair?.targetLanguage;
+    const selectedTargetLanguage = this.#getSelectedTargetLanguageTag();
     const { targetSectionTextArea } = this.elements;
 
     if (selectedTargetLanguage && targetSectionTextArea.value) {
-      targetSectionTextArea.setAttribute(
-        "dir",
-        AT_getScriptDirection(selectedTargetLanguage)
-      );
+      this.#updateTextAreaAttributes(targetSectionTextArea, {
+        languageTag: selectedTargetLanguage,
+      });
     } else {
-      targetSectionTextArea.setAttribute(
-        "dir",
-        AT_getScriptDirection(appLocale)
-      );
+      this.#updateTextAreaAttributes(targetSectionTextArea, {
+        languageTag: AT_getAppLocaleAsBCP47(),
+        removeLangAttribute: true,
+      });
     }
   }
 
@@ -1940,14 +2236,11 @@ class AboutTranslations {
       );
 
       if (!sourceText) {
+        this.#clearTranslationRequestTelemetryThrottle();
         this.#setTargetText("");
 
         if (this.#isDetectLanguageSelected()) {
           this.#resetDetectLanguageOptionText();
-          this.elements.sourceSectionTextArea.setAttribute(
-            "dir",
-            AT_getScriptDirection(AT_getAppLocale())
-          );
         }
 
         this.#updateURLFromUI();
@@ -2027,10 +2320,6 @@ class AboutTranslations {
         this.#setTargetText("");
         this.#destroyTranslator();
         this.#updateSwapLanguagesButtonEnabledState();
-        this.elements.targetSectionTextArea.setAttribute(
-          "dir",
-          AT_getScriptDirection(AT_getAppLocale())
-        );
         this.#hideTranslationErrorMessage();
         return;
       }
@@ -2061,6 +2350,12 @@ class AboutTranslations {
 
       dispatchTestEvent("AboutTranslationsTest:TranslationRequested", {
         translationId,
+      });
+
+      void this.#maybeRecordTranslationRequestTelemetry({
+        sourceLanguage: selectedLanguagePair.sourceLanguage,
+        targetLanguage: selectedLanguagePair.targetLanguage,
+        sourceText,
       });
 
       const startTime = performance.now();

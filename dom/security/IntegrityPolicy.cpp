@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -207,7 +205,8 @@ nsresult IntegrityPolicy::ParseHeaders(const nsACString& aHeader,
   RefPtr<IntegrityPolicy> policy = new IntegrityPolicy();
 
   LOG("[{}] Parsing headers: enforcement='{}' report-only='{}'",
-      static_cast<void*>(policy), aHeader.Data(), aHeaderRO.Data());
+      static_cast<void*>(policy), PromiseFlatCString(aHeader).get(),
+      PromiseFlatCString(aHeaderRO).get());
 
   nsCOMPtr<nsISFVService> sfv = net::GetSFVService();
   NS_ENSURE_TRUE(sfv, NS_ERROR_FAILURE);
@@ -428,11 +427,8 @@ constexpr static const uint32_t kIntegrityPolicySerializationVersion = 1;
 
 NS_IMETHODIMP
 IntegrityPolicy::Read(nsIObjectInputStream* aStream) {
-  nsresult rv;
-
   uint32_t version;
-  rv = aStream->Read32(&version);
-  NS_ENSURE_SUCCESS(rv, rv);
+  MOZ_TRY(aStream->Read32(&version));
 
   if (version != kIntegrityPolicySerializationVersion) {
     LOG("IntegrityPolicy::Read: Unsupported version: {}", version);
@@ -441,36 +437,31 @@ IntegrityPolicy::Read(nsIObjectInputStream* aStream) {
 
   for (const bool& isRO : {false, true}) {
     bool hasPolicy;
-    rv = aStream->ReadBoolean(&hasPolicy);
-    NS_ENSURE_SUCCESS(rv, rv);
+    MOZ_TRY(aStream->ReadBoolean(&hasPolicy));
 
     if (!hasPolicy) {
       continue;
     }
 
     uint32_t sources;
-    rv = aStream->Read32(&sources);
-    NS_ENSURE_SUCCESS(rv, rv);
+    MOZ_TRY(aStream->Read32(&sources));
 
     Sources sourcesSet;
     sourcesSet.deserialize(sources);
 
     uint32_t destinations;
-    rv = aStream->Read32(&destinations);
-    NS_ENSURE_SUCCESS(rv, rv);
+    MOZ_TRY(aStream->Read32(&destinations));
 
     Destinations destinationsSet;
     destinationsSet.deserialize(destinations);
 
     uint32_t endpointsLen;
-    rv = aStream->Read32(&endpointsLen);
-    NS_ENSURE_SUCCESS(rv, rv);
+    MOZ_TRY(aStream->Read32(&endpointsLen));
 
     nsTArray<nsCString> endpoints(endpointsLen);
     for (size_t endpointI = 0; endpointI < endpointsLen; endpointI++) {
       nsCString endpoint;
-      rv = aStream->ReadCString(endpoint);
-      NS_ENSURE_SUCCESS(rv, rv);
+      MOZ_TRY(aStream->ReadCString(endpoint));
       endpoints.AppendElement(std::move(endpoint));
     }
 
@@ -487,29 +478,22 @@ IntegrityPolicy::Read(nsIObjectInputStream* aStream) {
 
 NS_IMETHODIMP
 IntegrityPolicy::Write(nsIObjectOutputStream* aStream) {
-  nsresult rv;
-
-  rv = aStream->Write32(kIntegrityPolicySerializationVersion);
-  NS_ENSURE_SUCCESS(rv, rv);
+  MOZ_TRY(aStream->Write32(kIntegrityPolicySerializationVersion));
 
   for (const auto& entry : {mEnforcement, mReportOnly}) {
     if (!entry) {
-      aStream->WriteBoolean(false);
+      MOZ_TRY(aStream->WriteBoolean(false));
       continue;
     }
 
-    aStream->WriteBoolean(true);
+    MOZ_TRY(aStream->WriteBoolean(true));
 
-    rv = aStream->Write32(entry->mSources.serialize());
-    NS_ENSURE_SUCCESS(rv, rv);
+    MOZ_TRY(aStream->Write32(entry->mSources.serialize()));
+    MOZ_TRY(aStream->Write32(entry->mDestinations.serialize()));
 
-    rv = aStream->Write32(entry->mDestinations.serialize());
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    rv = aStream->Write32(entry->mEndpoints.Length());
+    MOZ_TRY(aStream->Write32(entry->mEndpoints.Length()));
     for (const auto& endpoint : entry->mEndpoints) {
-      rv = aStream->WriteCString(endpoint);
-      NS_ENSURE_SUCCESS(rv, rv);
+      MOZ_TRY(aStream->WriteCString(endpoint));
     }
   }
 

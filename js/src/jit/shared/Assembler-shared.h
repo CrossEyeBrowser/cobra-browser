@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -12,6 +10,7 @@
 #endif
 #include "mozilla/DebugOnly.h"
 
+#include <bit>
 #include <limits.h>
 #include <utility>  // std::pair
 
@@ -568,7 +567,7 @@ class MemoryAccessDesc {
         widenOp_(wasm::SimdOp::Limit),
         loadOp_(Plain),
         hugeMemory_(hugeMemory) {
-    MOZ_ASSERT(mozilla::IsPowerOfTwo(align));
+    MOZ_ASSERT(std::has_single_bit(align));
   }
 
   uint32_t memoryIndex() const {

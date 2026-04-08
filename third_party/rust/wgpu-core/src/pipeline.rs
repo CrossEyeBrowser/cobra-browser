@@ -139,22 +139,21 @@ pub enum CreateShaderModuleError {
 
 impl WebGpuError for CreateShaderModuleError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::MissingFeatures(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(e) => e.webgpu_error_type(),
 
-            Self::Generation => return ErrorType::Internal,
+            Self::Generation => ErrorType::Internal,
 
-            Self::Validation(..) | Self::InvalidGroupIndex { .. } => return ErrorType::Validation,
+            Self::Validation(..) | Self::InvalidGroupIndex { .. } => ErrorType::Validation,
             #[cfg(feature = "wgsl")]
-            Self::Parsing(..) => return ErrorType::Validation,
+            Self::Parsing(..) => ErrorType::Validation,
             #[cfg(feature = "glsl")]
-            Self::ParsingGlsl(..) => return ErrorType::Validation,
+            Self::ParsingGlsl(..) => ErrorType::Validation,
             #[cfg(feature = "spirv")]
-            Self::ParsingSpirV(..) => return ErrorType::Validation,
-            Self::NotCompiledForBackend => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            Self::ParsingSpirV(..) => ErrorType::Validation,
+            Self::NotCompiledForBackend => ErrorType::Validation,
+        }
     }
 }
 
@@ -208,13 +207,12 @@ pub enum ImplicitLayoutError {
 
 impl WebGpuError for ImplicitLayoutError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::ReflectionError(_) => return ErrorType::Validation,
-            Self::BindGroup(e) => e,
-            Self::Pipeline(e) => e,
-            Self::Passthrough(_) => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+        match self {
+            Self::ReflectionError(_) => ErrorType::Validation,
+            Self::BindGroup(e) => e.webgpu_error_type(),
+            Self::Pipeline(e) => e.webgpu_error_type(),
+            Self::Passthrough(_) => ErrorType::Validation,
+        }
     }
 }
 
@@ -261,16 +259,15 @@ pub enum CreateComputePipelineError {
 
 impl WebGpuError for CreateComputePipelineError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::InvalidResource(e) => e,
-            Self::MissingDownlevelFlags(e) => e,
-            Self::Implicit(e) => e,
-            Self::Stage(e) => e,
-            Self::Internal(_) => return ErrorType::Internal,
-            Self::PipelineConstants(_) => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::InvalidResource(e) => e.webgpu_error_type(),
+            Self::MissingDownlevelFlags(e) => e.webgpu_error_type(),
+            Self::Implicit(e) => e.webgpu_error_type(),
+            Self::Stage(e) => e.webgpu_error_type(),
+            Self::Internal(_) => ErrorType::Internal,
+            Self::PipelineConstants(_) => ErrorType::Validation,
+        }
     }
 }
 
@@ -329,12 +326,11 @@ pub enum CreatePipelineCacheError {
 
 impl WebGpuError for CreatePipelineCacheError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::Validation(e) => e,
-            Self::MissingFeatures(e) => e,
-        };
-        e.webgpu_error_type()
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::Validation(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(e) => e.webgpu_error_type(),
+        }
     }
 }
 
@@ -728,6 +724,8 @@ pub enum CreateRenderPipelineError {
     },
     #[error("In the provided shader, the type given for group {group} binding {binding} has a size of {size}. As the device does not support `DownlevelFlags::BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED`, the type must have a size that is a multiple of 16 bytes.")]
     UnalignedShader { group: u32, binding: u32, size: u64 },
+    #[error("Dual-source blending requires exactly one color target, but {count} color targets are present")]
+    DualSourceBlendingWithMultipleColorTargets { count: usize },
     #[error("{}", concat!(
         "At least one color attachment or depth-stencil attachment was expected, ",
         "but no render target for the pipeline was specified."
@@ -739,13 +737,13 @@ pub enum CreateRenderPipelineError {
 
 impl WebGpuError for CreateRenderPipelineError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::InvalidResource(e) => e,
-            Self::MissingFeatures(e) => e,
-            Self::MissingDownlevelFlags(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::InvalidResource(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(e) => e.webgpu_error_type(),
+            Self::MissingDownlevelFlags(e) => e.webgpu_error_type(),
 
-            Self::Internal { .. } => return ErrorType::Internal,
+            Self::Internal { .. } => ErrorType::Internal,
 
             Self::ColorAttachment(_)
             | Self::Implicit(_)
@@ -763,11 +761,11 @@ impl WebGpuError for CreateRenderPipelineError {
             | Self::ConservativeRasterizationNonFillPolygonMode
             | Self::Stage { .. }
             | Self::UnalignedShader { .. }
+            | Self::DualSourceBlendingWithMultipleColorTargets { .. }
             | Self::NoTargetSpecified
             | Self::PipelineConstants { .. }
-            | Self::VertexAttributeStrideTooLarge { .. } => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            | Self::VertexAttributeStrideTooLarge { .. } => ErrorType::Validation,
+        }
     }
 }
 

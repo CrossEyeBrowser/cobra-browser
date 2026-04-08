@@ -6,16 +6,9 @@ add_setup(() =>
   })
 );
 
-async function expectFocusAfterKey(expectedActiveElement, keyName, keyOptions) {
-  let focused = BrowserTestUtils.waitForEvent(expectedActiveElement, "focus");
-  EventUtils.synthesizeKey(keyName, keyOptions);
-  await focused;
-  Assert.equal(
-    document.activeElement,
-    expectedActiveElement,
-    `After ${keyName}, the expected element has focus`
-  );
-}
+registerCleanupFunction(() =>
+  Services.prefs.clearUserPref("browser.tabs.splitview.hasUsed")
+);
 
 /* Test that
  * the splitter in a split view is focusable
@@ -58,6 +51,11 @@ add_task(async function test_SplitterKeyboardA11Y() {
     splitter.getAttribute("role"),
     "separator",
     "The splitter has the separator role"
+  );
+  await BrowserTestUtils.waitForMutationCondition(
+    splitter,
+    { attributes: true, attributeFilter: ["aria-controls"] },
+    () => splitter.hasAttribute("aria-controls")
   );
   Assert.equal(
     splitter.getAttribute("aria-controls"),
@@ -121,6 +119,13 @@ add_task(async function test_SplitterKeyboardA11Y() {
   const splitView2 = gBrowser.addTabSplitView([tab3, tab4], {
     insertBefore: tab3,
   });
+  await BrowserTestUtils.waitForMutationCondition(
+    splitter,
+    { attributes: true, attributeFilter: ["aria-controls"] },
+    () =>
+      splitter.hasAttribute("aria-controls") &&
+      splitter.getAttribute("aria-controls") !== leftPanel.id
+  );
   let controlledPanelId = splitter.getAttribute("aria-controls");
   Assert.equal(
     controlledPanelId,
@@ -142,6 +147,14 @@ add_task(async function test_SplitterKeyboardA11Y() {
   );
 
   splitView.close();
+  await BrowserTestUtils.waitForMutationCondition(
+    splitter,
+    { attributes: true },
+    () =>
+      !splitter.hasAttribute("aria-valuemin") &&
+      !splitter.hasAttribute("aria-valuemax") &&
+      !splitter.hasAttribute("aria-valuenow")
+  );
   Assert.ok(!splitter.ariaValueMin, "The aria-valuemin attribute was removed");
   Assert.ok(!splitter.ariaValueMax, "aria-valuemax attribute was removed");
   Assert.ok(!splitter.ariaValueNow, "aria-valuenow attribute was removed");

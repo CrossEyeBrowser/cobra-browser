@@ -11,6 +11,7 @@ import {
 import {
   constructRelevantMemoriesContextMessage,
   constructRealTimeInfoInjectionMessage,
+  sanitizeUntrustedContent,
 } from "moz-src:///browser/components/aiwindow/models/ChatUtils.sys.mjs";
 
 import { getRoleLabel } from "./ChatUtils.sys.mjs";
@@ -18,7 +19,7 @@ import {
   CONVERSATION_STATUS,
   MESSAGE_ROLE,
   SYSTEM_PROMPT_TYPE,
-} from "./ChatConstants.sys.mjs";
+} from "./AIWindowConstants.sys.mjs";
 import {
   AssistantRoleOpts,
   ChatMessage,
@@ -26,12 +27,34 @@ import {
   UserRoleOpts,
 } from "./ChatMessage.sys.mjs";
 
+import { EventEmitter } from "resource://gre/modules/EventEmitter.sys.mjs";
+import {
+  consumeStreamChunk,
+  createParserState,
+  flushTokenRemainder,
+} from "chrome://browser/content/aiwindow/modules/TokenStreamParser.mjs";
+import { SecurityProperties } from "moz-src:///browser/components/aiwindow/models/SecurityProperties.sys.mjs";
+
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  ChatStore:
+    "moz-src:///browser/components/aiwindow/ui/modules/ChatStore.sys.mjs",
+  MemoriesManager:
+    "moz-src:///browser/components/aiwindow/models/memories/MemoriesManager.sys.mjs",
+});
+
+ChromeUtils.defineLazyGetter(lazy, "console", function () {
+  return console.createInstance({
+    prefix: "ChatConversation",
+  });
+});
+
 const CHAT_ROLES = [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT];
 
 /**
  * A conversation containing messages.
  */
-export class ChatConversation {
+export class ChatConversation extends EventEmitter {
   id;
   title;
   description;
@@ -40,9 +63,27 @@ export class ChatConversation {
   createdDate;
   updatedDate;
   status;
+  securityProperties;
+  /** @type {ChatMessage[]} */
   #messages;
   #minNextOrdinal = 0;
   activeBranchTipMessageId;
+
+  /**
+   * Language models can generate arbitrary URLs. If a conversation has been exposed
+   * to untrusted content (such as from summarizing a webpage) then it can be prompt
+   * injected to display arbitrary URLs. Language models can also invent plausible URLs
+   * for a conversation that do not exist.
+   *
+   * To mitigate these issues we collect all URLs that have been seen in a conversation
+   * so that we can decide how to show them to users in a safe way. If a URL has not
+   * been seen before, then it's untrusted in different circumstances.
+   *
+   * Initialized from the constructor params (restored from DB) or as an empty Set.
+   *
+   * @type {Set<string>}
+   */
+  seenUrls;
 
   /**
    * @param {object} params
@@ -66,7 +107,10 @@ export class ChatConversation {
       createdDate = Date.now(),
       updatedDate = Date.now(),
       messages = [],
+      seenUrls,
     } = params;
+
+    super();
 
     this.id = id;
     this.title = title;
@@ -76,9 +120,97 @@ export class ChatConversation {
     this.createdDate = createdDate;
     this.updatedDate = updatedDate;
     this.#messages = messages;
+    this.seenUrls = seenUrls ? new Set(seenUrls) : new Set();
 
     // NOTE: Destructuring params.status causes a linter error
     this.status = params.status || CONVERSATION_STATUS.ACTIVE;
+    if (params.securityProperties instanceof SecurityProperties) {
+      this.securityProperties = params.securityProperties;
+    } else if (params.securityProperties != null) {
+      this.securityProperties = SecurityProperties.fromJSON(
+        params.securityProperties
+      );
+    } else {
+      this.securityProperties = new SecurityProperties();
+    }
+  }
+
+  handleChunk(chunk, currentMessage, parserState) {
+    let update = false;
+
+    const { plainText, tokens } = consumeStreamChunk(chunk, parserState);
+    if (plainText) {
+      currentMessage.content.body += plainText;
+      update = true;
+    }
+
+    if (tokens) {
+      currentMessage.addTokens(tokens);
+      update = true;
+    }
+
+    if (update) {
+      this.emit("chat-conversation:message-update", currentMessage);
+
+      lazy.ChatStore.updateConversation(this);
+    }
+  }
+
+  async receiveResponse(stream) {
+    const parserState = createParserState();
+    const currentMessage = this.#getCurrentAssistantResponse();
+
+    if (currentMessage?.content?.body) {
+      currentMessage.content.body += "\n\n";
+    }
+
+    let pendingToolCalls = null;
+    let fullResponseText = "";
+    let usage = null;
+
+    for await (const chunk of stream) {
+      usage = chunk?.usage;
+      if (chunk.text) {
+        fullResponseText += chunk.text;
+        this.handleChunk(chunk.text, currentMessage, parserState);
+      }
+
+      if (chunk?.toolCalls?.length) {
+        pendingToolCalls = chunk.toolCalls;
+      }
+    }
+
+    const remainder = flushTokenRemainder(parserState);
+    if (remainder) {
+      currentMessage.content.body += remainder;
+      this.emit("chat-conversation:message-update", currentMessage);
+    }
+
+    if (currentMessage._pendingMemoryIds?.length) {
+      currentMessage.memoriesApplied =
+        await lazy.MemoriesManager.getMemoriesByID(
+          new Set(currentMessage._pendingMemoryIds)
+        );
+
+      delete currentMessage._pendingMemoryIds;
+
+      this.emit("chat-conversation:message-update", currentMessage);
+    }
+
+    await lazy.ChatStore.updateConversation(this);
+    this.emit("chat-conversation:message-complete", currentMessage);
+
+    return { pendingToolCalls, fullResponseText, usage };
+  }
+
+  #getCurrentAssistantResponse() {
+    return this.messages
+      .filter(
+        message =>
+          message.role === MESSAGE_ROLE.ASSISTANT &&
+          message?.content?.type === "text"
+      )
+      .at(-1);
   }
 
   /**
@@ -167,6 +299,26 @@ export class ChatConversation {
   }
 
   /**
+   * Gets any URL mentioned in the conversation. These URLs have heightened security
+   * permissions as they have been explicitly added to the conversation by the user.
+   *
+   * @returns {Set<string>}
+   */
+  getAllMentionURLs() {
+    /** @type {Set<string>} */
+    const mentionUrls = new Set();
+    for (const message of this.#messages) {
+      const { contextMentions } = message.content;
+      if (contextMentions) {
+        for (const { url } of contextMentions) {
+          mentionUrls.add(url);
+        }
+      }
+    }
+    return mentionUrls;
+  }
+
+  /**
    * Add a user message to the conversation
    *
    * @todo Bug 2005424
@@ -191,6 +343,10 @@ export class ChatConversation {
 
     if (userOpts.contextMentions?.length) {
       content.contextMentions = userOpts.contextMentions;
+    }
+
+    if (pageUrl) {
+      content.contextPageUrl = pageUrl.href;
     }
 
     let currentTurn = this.currentTurnIndex();
@@ -270,11 +426,20 @@ export class ChatConversation {
    * adding new user prompt to messages.
    *
    * @param {string} prompt - new user prompt
-   * @param {URL} pageUrl - The URL of the page when prompt was submitted
+   * @param {?URL} pageUrl - The URL of the page when prompt was submitted
    * @param {openAIEngine} engineInstance
    * @param {UserRoleOpts} [userOpts]
+   * @param {boolean} [skipUserDispatch=false] - If true, do not emit the
+   *   message-update event after adding the user message (used for retries
+   *   to avoid duplicate user messages in the child process).
    */
-  async generatePrompt(prompt, pageUrl, engineInstance, userOpts = undefined) {
+  async generatePrompt(
+    prompt,
+    pageUrl,
+    engineInstance,
+    userOpts = undefined,
+    skipUserDispatch = false
+  ) {
     // Remove stale ephemeral messages before adding new user message
     this.removeSystemTimeMemoriesMessages();
 
@@ -283,25 +448,47 @@ export class ChatConversation {
       this.addSystemMessage(SYSTEM_PROMPT_TYPE.TEXT, systemPrompt);
     }
 
+    // userContext starts empty so the user message can be added and dispatched
+    // immediately for better perceived performance. The realTimeContext and
+    // memoriesContext properties are set on it by reference below before this
+    // method returns, so the full context is available to getMessagesInOpenAiFormat()
+    // when the LLM call is made.
     let userContext = {};
-    const realTimeContext = await this.getRealTimeInfo(engineInstance, {
-      contextMentions: userOpts?.contextMentions,
-    });
+    this.addUserMessage(prompt, pageUrl, userOpts, userContext);
+    if (!skipUserDispatch) {
+      this.emit("chat-conversation:message-update", this.messages.at(-1));
+    }
+
+    const realTimeContext = await ChatConversation.getRealTimeInfo(
+      engineInstance,
+      {
+        contextMentions: userOpts?.contextMentions,
+        securityProperties: this.securityProperties,
+      }
+    );
     if (realTimeContext) {
-      userContext[realTimeContext] = realTimeContext;
+      userContext.realTimeContext = realTimeContext;
     }
 
     if (userOpts?.memoriesEnabled) {
-      const memoriesContext = await this.getMemoriesContext(
-        prompt,
-        engineInstance
-      );
-      if (memoriesContext) {
-        userContext[memoriesContext] = memoriesContext;
+      try {
+        const memoriesContext = await this.getMemoriesContext(
+          prompt,
+          engineInstance,
+          undefined,
+          this.securityProperties
+        );
+        if (memoriesContext) {
+          userContext.memoriesContext = memoriesContext;
+        }
+      } catch (memoriesContextError) {
+        lazy.console.error(
+          `Failed to generate memories context message: ${memoriesContextError}`
+        );
       }
     }
-    this.addUserMessage(prompt, pageUrl, userOpts, userContext);
 
+    this.securityProperties.commit();
     return this;
   }
 
@@ -378,7 +565,7 @@ export class ChatConversation {
    * returns content.
    *
    * @typedef {
-   *   (depsOverride?: object) => Promise<{url, title, description, locale, timezone, isoTimestamp, todayDate, hasTabInfo}>
+   *   (contextMentions: Array<ContextWebsite>) => Promise<{url, title, description, locale, timezone, isoTimestamp, todayDate, hasTabInfo}>
    * } RealTimeApiFunction
    *
    * @param {openAIEngine} engineInstance - The initialized engine instance
@@ -386,22 +573,25 @@ export class ChatConversation {
    * @param {RealTimeApiFunction} [options.getRealTimeMapping=constructRealTimeInfoInjectionMessage]
    * @param {ContextWebsite[]} [options.contextMentions]
    *   URLs provided by the user as additional context
+   * @param {SecurityProperties} [options.securityProperties]
    *
    * @returns {Promise<string|null>} - Promise that resolves with real time info or null
    */
-  async getRealTimeInfo(
+  static async getRealTimeInfo(
     engineInstance,
     {
       getRealTimeMapping = constructRealTimeInfoInjectionMessage,
       contextMentions,
+      securityProperties,
     } = {}
   ) {
-    const realTimeInfoMapping = await getRealTimeMapping();
+    const realTimeInfoMapping = await getRealTimeMapping(contextMentions);
     if (realTimeInfoMapping) {
       let realTimePromptRaw = await engineInstance.loadPrompt(
         MODEL_FEATURES.REAL_TIME_CONTEXT_DATE
       );
       if (realTimeInfoMapping.hasTabInfo) {
+        securityProperties.setPrivateData();
         const realTimeTabPromptRaw = await engineInstance.loadPrompt(
           MODEL_FEATURES.REAL_TIME_CONTEXT_TAB
         );
@@ -415,7 +605,10 @@ export class ChatConversation {
 
       if (contextMentions?.length) {
         const contextUrls = contextMentions
-          .map(mention => `- ${mention.label} (${mention.url})`)
+          .map(
+            mention =>
+              `- URL: ${mention.url}\n  Title: ${sanitizeUntrustedContent(mention.label)}`
+          )
           .join("\n");
         realTimeInfoMapping.contextUrls = contextUrls;
         const contextMentionsPrompt = await engineInstance.loadPrompt(
@@ -454,16 +647,22 @@ export class ChatConversation {
    * @param {message} message
    * @param {openAIEngine} engineInstance
    * @param {MemoriesApiFunction} [constructMemories=constructRelevantMemoriesContextMessage]
+   * @param {SecurityProperties} [securityProperties]
    *
    * @returns {Promise<string|null>} - Promise that resolves with relevant memories or null
    */
   async getMemoriesContext(
     message,
     engineInstance,
-    constructMemories = constructRelevantMemoriesContextMessage
+    constructMemories = constructRelevantMemoriesContextMessage,
+    securityProperties
   ) {
     const memoriesContext = await constructMemories(message, engineInstance);
-    return memoriesContext?.content ?? null;
+    if (memoriesContext != null) {
+      securityProperties.setPrivateData();
+      return memoriesContext.content;
+    }
+    return null;
   }
 
   /**
@@ -572,5 +771,21 @@ export class ChatConversation {
 
   get messages() {
     return this.#messages;
+  }
+
+  get messageCount() {
+    return this.#messages.filter(m => CHAT_ROLES.includes(m.role)).length;
+  }
+
+  /**
+   * Efficiently add an iterable of URLs to the seen urls.
+   *
+   * @param {Iterable<string>} urls
+   */
+  addSeenUrls(urls) {
+    for (const url of urls) {
+      this.seenUrls.add(url);
+    }
+    this.emit("chat-conversation:seen-urls-updated", this.seenUrls);
   }
 }

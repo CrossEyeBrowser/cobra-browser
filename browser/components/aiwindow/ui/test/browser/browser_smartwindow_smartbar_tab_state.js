@@ -53,12 +53,10 @@ function createMockConversation(id = "test-conv-id") {
  */
 async function waitForSidebarAIWindow(win) {
   const sidebarBrowser = win.document.getElementById(AIWindowUI.BROWSER_ID);
-  await SpecialPowers.spawn(sidebarBrowser, [], async () => {
-    await ContentTaskUtils.waitForCondition(
-      () => content.document.querySelector("ai-window"),
-      "ai-window should be loaded in sidebar"
-    );
-  });
+  await TestUtils.waitForCondition(
+    () => sidebarBrowser.contentDocument?.querySelector("ai-window:defined"),
+    "Sidebar ai-window should be defined"
+  );
   return sidebarBrowser;
 }
 
@@ -91,18 +89,20 @@ async function submitSmartbar(browser) {
  * @returns {string|null} The smartbar value, or null if sidebar is unavailable
  */
 async function getSidebarInputValue(win) {
-  const aiWindowEl = AIWindowUI._getSidebarAiWindow(win);
-  if (!aiWindowEl) {
+  if (!AIWindowUI.isSidebarOpen(win)) {
     return null;
   }
 
-  await BrowserTestUtils.waitForCondition(
-    () => typeof aiWindowEl.shadowRoot?.querySelector === "function",
-    "AIWindow shadowRoot was not ready"
-  );
-
-  const smartbar = aiWindowEl.shadowRoot.querySelector("#ai-window-smartbar");
-  return smartbar?.value ?? "";
+  const sidebarBrowser = win.document.getElementById(AIWindowUI.BROWSER_ID);
+  return SpecialPowers.spawn(sidebarBrowser, [], async () => {
+    const aiWindowEl = content.document.querySelector("ai-window");
+    await ContentTaskUtils.waitForCondition(
+      () => aiWindowEl.shadowRoot?.querySelector("#ai-window-smartbar"),
+      "Smartbar should be rendered"
+    );
+    const smartbar = aiWindowEl.shadowRoot.querySelector("#ai-window-smartbar");
+    return smartbar?.value ?? "";
+  });
 }
 
 /**
@@ -167,7 +167,6 @@ describe("Smartbar tab state input tracking", () => {
       browser = win.gBrowser.selectedBrowser;
       tab = win.gBrowser.selectedTab;
 
-      await BrowserTestUtils.browserLoaded(browser, false, AIWINDOW_URL);
       await navigateFromFullpage(win, browser, mockConversation);
 
       sidebarBrowser = await waitForSidebarAIWindow(win);
@@ -228,6 +227,27 @@ describe("Smartbar tab state input tracking", () => {
       );
     });
 
+    it("should submit when re-selecting the current action from the dropdown", async () => {
+      await typeInSmartbar(sidebarBrowser, "hello");
+      await SpecialPowers.spawn(sidebarBrowser, [], async () => {
+        const aiWindowElement = content.document.querySelector("ai-window");
+        const smartbar = await ContentTaskUtils.waitForCondition(
+          () =>
+            aiWindowElement.shadowRoot?.querySelector("#ai-window-smartbar"),
+          "Wait for Smartbar to be rendered"
+        );
+        const inputCta = smartbar.querySelector("input-cta");
+        inputCta.shadowRoot
+          .querySelector("panel-list")
+          .querySelector(`panel-item[icon="chat"]`)
+          .click();
+        await ContentTaskUtils.waitForCondition(
+          () => smartbar.value === "",
+          "Smartbar should be cleared after re-selecting the same action"
+        );
+      });
+    });
+
     it("should preserve input from URL bar navigation", async () => {
       await typeInSmartbar(sidebarBrowser, "hello");
 
@@ -239,6 +259,70 @@ describe("Smartbar tab state input tracking", () => {
         await getSidebarInputValue(win),
         "hello",
         "Input should be preserved after URL bar navigation"
+      );
+    });
+  });
+
+  describe("when navigating away from the fullpage AI window", () => {
+    let win, browser, tab, sandbox;
+
+    beforeEach(async () => {
+      sandbox = lazy.sinon.createSandbox();
+
+      const mockConversation = createMockConversation();
+      sandbox
+        .stub(ChatStore, "findConversationById")
+        .resolves(mockConversation);
+      sandbox.stub(Chat, "fetchWithHistory");
+      sandbox.stub(openAIEngine, "build").resolves({
+        loadPrompt: () => Promise.resolve("Mock system prompt"),
+      });
+
+      win = await openAIWindow();
+      browser = win.gBrowser.selectedBrowser;
+      tab = win.gBrowser.selectedTab;
+    });
+
+    afterEach(async () => {
+      sandbox.restore();
+      sandbox = null;
+      await BrowserTestUtils.removeTab(tab);
+      await BrowserTestUtils.closeWindow(win);
+      win = null;
+      browser = null;
+      tab = null;
+    });
+
+    it("should not leak fullpage smartbar input into the sidebar", async () => {
+      const mockConversation = createMockConversation();
+      AIWindowUI.openInFullWindow(browser, mockConversation);
+
+      win.dispatchEvent(
+        new win.CustomEvent("ai-window:smartbar-input", {
+          bubbles: true,
+          detail: {
+            tab,
+            mode: "fullpage",
+            input: "youtube.com",
+            conversationId: mockConversation.id,
+          },
+        })
+      );
+
+      const loaded = BrowserTestUtils.browserLoaded(browser);
+      BrowserTestUtils.startLoadingURIString(browser, "https://example.com/");
+      await loaded;
+
+      await TestUtils.waitForCondition(
+        () => AIWindowUI.isSidebarOpen(win),
+        "Sidebar should open after navigating away with active conversation"
+      );
+      await waitForSidebarAIWindow(win);
+
+      Assert.equal(
+        await getSidebarInputValue(win),
+        "",
+        "Sidebar should not show text typed in the fullpage smartbar"
       );
     });
   });
@@ -265,7 +349,6 @@ describe("Smartbar tab state input tracking", () => {
       browserA = win.gBrowser.selectedBrowser;
       tabA = win.gBrowser.selectedTab;
 
-      await BrowserTestUtils.browserLoaded(browserA, false, AIWINDOW_URL);
       await navigateFromFullpage(win, browserA, conversationA);
 
       sidebarBrowser = await waitForSidebarAIWindow(win);

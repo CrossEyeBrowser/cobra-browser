@@ -422,6 +422,9 @@ skip-if = [
 ["test_bug1649005.html"]
 
 ["test_bug1659276.html"]
+skip-if = [
+  "standalone", # Bug 2026600
+]
 
 ["test_bug1704381.html"]
 
@@ -444,6 +447,8 @@ skip-if = [
 ["test_command_state_when_readonly.html"]
 
 ["test_composition_event_created_in_chrome.html"]
+
+["test_composition_modified_as_multiple_text_nodes.html"]
 
 ["test_composition_with_highlight_in_texteditor.html"]
 
@@ -631,6 +636,8 @@ skip-if = [
 ["test_pasteImgFromTransferable.html"]
 
 ["test_pasteImgTextarea.html"]
+
+["test_pasteURLFromTransferable.html"]
 
 ["test_paste_as_quote_in_text_control.html"]
 

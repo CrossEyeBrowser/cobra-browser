@@ -78,6 +78,7 @@ PER_PROJECT_PARAMETERS = {
         "release_type": "nightly",
     },
     "mozilla-beta": {
+        "optimize_strategies": "gecko_taskgraph.optimize:project.beta",
         "target_tasks_method": "mozilla_beta_tasks",
         "release_type": "beta",
     },
@@ -113,6 +114,11 @@ PER_PROJECT_PARAMETERS = {
         "target_tasks_method": "mozilla_central_tasks",
     },
     # git projects
+    "firefox": {
+        # TODO We'll eventually need to split this out based on tasks_for and
+        # branch, but for now just use the pull request target_tasks_method.
+        "target_tasks_method": "firefox_pull_request_tasks",
+    },
     "staging-firefox": {
         "target_tasks_method": "default",
     },
@@ -408,7 +414,7 @@ def get_decision_parameters(graph_config, options):
         task_config_file = os.path.join(os.getcwd(), "try_task_config.json")
 
     # load try settings
-    if "try" in project and options["tasks_for"] == "hg-push":
+    if "try" in project and options["tasks_for"] in ("hg-push", "github-push"):
         set_try_config(parameters, task_config_file)
 
     if options.get("optimize_target_tasks") is not None:

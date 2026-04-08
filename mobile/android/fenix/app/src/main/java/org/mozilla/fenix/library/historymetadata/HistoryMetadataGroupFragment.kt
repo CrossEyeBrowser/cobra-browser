@@ -32,13 +32,13 @@ import mozilla.components.lib.state.helpers.StoreProvider.Companion.fragmentStor
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.ktx.kotlin.toShortUrl
 import mozilla.components.ui.widgets.withCenterAlignedButtons
+import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.addons.showSnackBar
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
-import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.databinding.FragmentHistoryMetadataGroupBinding
+import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.runIfFragmentIsAttached
@@ -60,7 +60,7 @@ import org.mozilla.fenix.utils.allowUndo
  */
 @SuppressWarnings("TooManyFunctions")
 class HistoryMetadataGroupFragment :
-    LibraryPageFragment<History.Metadata>(), UserInteractionHandler, MenuProvider {
+    LibraryPageFragment<History.Metadata>(), UserInteractionHandler, MenuProvider, SystemInsetsPaddedFragment {
 
     private lateinit var historyMetadataGroupStore: HistoryMetadataGroupFragmentStore
     private lateinit var interactor: HistoryMetadataGroupInteractor
@@ -221,13 +221,10 @@ class HistoryMetadataGroupFragment :
             selectedItem.url
         }
 
-        requireComponents.appStore.dispatch(
-            AppAction.BrowsingModeManagerModeChanged(
-                mode = BrowsingMode.Private,
-            ),
-        )
-
-        hideToolbar()
+        (activity as HomeActivity).apply {
+            browsingModeManager.mode = BrowsingMode.Private
+            supportActionBar?.hide()
+        }
 
         showTabTray(openInPrivate = true)
     }

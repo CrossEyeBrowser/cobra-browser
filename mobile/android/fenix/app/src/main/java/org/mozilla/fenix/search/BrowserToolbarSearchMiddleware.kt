@@ -27,6 +27,7 @@ import mozilla.components.browser.state.action.AwesomeBarAction.EngagementFinish
 import mozilla.components.browser.state.search.SearchEngine
 import mozilla.components.browser.state.search.SearchEngine.Type.APPLICATION
 import mozilla.components.browser.state.search.SearchEngine.Type.CUSTOM
+import mozilla.components.browser.state.selector.findTab
 import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.browser.toolbar.BrowserToolbar
@@ -67,6 +68,7 @@ import org.mozilla.fenix.GleanMetrics.Toolbar
 import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.BrowserFragmentDirections
+import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.Components
 import org.mozilla.fenix.components.appstate.AppAction
@@ -138,6 +140,7 @@ internal sealed class EditPageEndActionsInteractions : BrowserToolbarEvent {
  * @param browserStore [BrowserStore] used for querying and updating browser state.
  * @param components [Components] for accessing other functionalities of the application.
  * @param navController [NavController] to use for navigating to other in-app destinations.
+ * @param browsingModeManager [BrowsingModeManager] for querying the current browsing mode.
  * @param settings [Settings] for accessing application settings.
  * @param scope [CoroutineScope] used for running long running operations in background.
  * @param autocompleteDispatcher [CoroutineContext] used for querying autocomplete suggestions.
@@ -149,6 +152,7 @@ class BrowserToolbarSearchMiddleware(
     private val browserStore: BrowserStore,
     private val components: Components,
     private val navController: NavController,
+    private val browsingModeManager: BrowsingModeManager,
     private val settings: Settings,
     private val scope: CoroutineScope,
     private val autocompleteDispatcher: CoroutineContext = defaultAutocompleteDispatcher,
@@ -159,7 +163,6 @@ class BrowserToolbarSearchMiddleware(
     private var observeVoiceInputJob: Job? = null
     private var updateAutocompleteJob: Job? = null
 
-    @Suppress("CyclomaticComplexMethod", "LongMethod")
     override fun invoke(
         store: Store<BrowserToolbarState, BrowserToolbarAction>,
         next: (BrowserToolbarAction) -> Unit,
@@ -198,112 +201,129 @@ class BrowserToolbarSearchMiddleware(
                 observeVoiceInputJob?.cancel()
             }
 
-            is SearchSelectorClicked -> {
-                Toolbar.buttonTapped.record(
-                    Toolbar.ButtonTappedExtra(
-                        source = SOURCE_ADDRESS_BAR,
-                        item = ACTION_SEARCH_ENGINE_SELECTOR_CLICKED,
-                    ),
-                )
-            }
+            is CommitUrl -> handleCommitingUrl(action.text)
 
-            is SearchSettingsItemClicked -> {
-                store.dispatch(SearchQueryUpdated(BrowserToolbarQuery("")))
-                appStore.dispatch(SearchEnded)
-                browserStore.dispatch(EngagementFinished(abandoned = true))
+            else -> handleToolbarButtonsActions(store, action)
+        }
+    }
+
+    private fun handleCommitingUrl(url: String) {
+        // Do not load URL if application search engine is selected.
+        if (reconcileSelectedEngine()?.type == SearchEngine.Type.APPLICATION) {
+            return
+        }
+
+        when (url) {
+            "about:crashes" -> {
+                // The list of past crashes can be accessed via "settings > about", but desktop and
+                // fennec users may be used to navigating to "about:crashes". So we intercept this here
+                // and open the crash list activity instead.
                 navController.navigate(
-                    BrowserFragmentDirections.actionGlobalSearchEngineFragment(),
+                    NavGraphDirections.actionGlobalCrashListFragment(),
                 )
             }
 
-            is SearchSelectorItemClicked -> {
-                appStore.dispatch(SearchEngineSelected(action.searchEngine, true))
-                appStore.dispatch(SearchStarted())
-                refreshConfigurationAfterSearchEngineChange(store, action.searchEngine)
-                updateSearchEndPageActions(store) // to update the visibility of the qr scanner button
-            }
-
-            is CommitUrl -> {
-                // Do not load URL if application search engine is selected.
-                if (reconcileSelectedEngine()?.type == SearchEngine.Type.APPLICATION) {
-                    return
-                }
-
-                when (action.text) {
-                    "about:crashes" -> {
-                        // The list of past crashes can be accessed via "settings > about", but desktop and
-                        // fennec users may be used to navigating to "about:crashes". So we intercept this here
-                        // and open the crash list activity instead.
-                        navController.navigate(
-                            NavGraphDirections.actionGlobalCrashListFragment(),
-                        )
-                    }
-                    "about:addons" -> {
-                        navController.navigate(
-                            NavGraphDirections.actionGlobalAddonsManagementFragment(),
-                        )
-                        browserStore.dispatch(EngagementFinished(abandoned = false))
-                    }
-                    "about:glean" -> {
-                        navController.navigate(
-                            NavGraphDirections.actionGlobalGleanDebugToolsFragment(),
-                        )
-                    }
-                    "moz://a" -> openSearchOrUrl(
-                        SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.MANIFESTO),
-                        navController,
-                    )
-                    else ->
-                        if (action.text.isNotBlank()) {
-                            openSearchOrUrl(action.text, navController)
-                        } else {
-                            browserStore.dispatch(EngagementFinished(abandoned = true))
-                        }
-                }
-
-                appStore.dispatch(SearchEnded)
-            }
-
-            is ClearSearchClicked -> {
-                Toolbar.buttonTapped.record(
-                    Toolbar.ButtonTappedExtra(source = SOURCE_ADDRESS_BAR, item = ACTION_CLEAR_CLICKED),
+            "about:addons" -> {
+                navController.navigate(
+                    NavGraphDirections.actionGlobalAddonsManagementFragment(),
                 )
-                store.dispatch(SearchQueryUpdated(BrowserToolbarQuery("")))
+                browserStore.dispatch(EngagementFinished(abandoned = false))
             }
 
-            is SearchQueryUpdated -> {
-                updateAutocompletions(store, action.query)
-                updateSearchEndPageActions(store)
-            }
-
-            is QrScannerClicked -> {
-                Toolbar.buttonTapped.record(
-                    Toolbar.ButtonTappedExtra(source = SOURCE_ADDRESS_BAR, item = ACTION_QR_CLICKED),
+            "about:glean" -> {
+                navController.navigate(
+                    NavGraphDirections.actionGlobalGleanDebugToolsFragment(),
                 )
-                observeQrScannerInput(store)
-                appStore.dispatch(QrScannerRequested)
             }
 
-            is VoiceSearchButtonClicked -> {
-                Toolbar.buttonTapped.record(
-                    Toolbar.ButtonTappedExtra(source = SOURCE_ADDRESS_BAR, item = ACTION_MICROPHONE_CLICKED),
-                )
-                appStore.dispatch(VoiceInputRequested)
-            }
+            "moz://a" -> openSearchOrUrl(
+                SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.MANIFESTO),
+                navController,
+            )
 
-            else -> {
-                // no-op.
+            else -> if (url.isNotBlank()) {
+                openSearchOrUrl(url, navController)
+            } else {
+                browserStore.dispatch(EngagementFinished(abandoned = true))
             }
+        }
+
+        appStore.dispatch(SearchEnded)
+    }
+
+    private fun handleToolbarButtonsActions(
+        store: Store<BrowserToolbarState, BrowserToolbarAction>,
+        action: BrowserToolbarAction,
+    ) = when (action) {
+        is SearchSelectorClicked -> {
+            Toolbar.buttonTapped.record(
+                Toolbar.ButtonTappedExtra(
+                    source = SOURCE_ADDRESS_BAR,
+                    item = ACTION_SEARCH_ENGINE_SELECTOR_CLICKED,
+                ),
+            )
+        }
+
+        is SearchSettingsItemClicked -> {
+            store.dispatch(SearchQueryUpdated(BrowserToolbarQuery("")))
+            appStore.dispatch(SearchEnded)
+            browserStore.dispatch(EngagementFinished(abandoned = true))
+            navController.navigate(
+                BrowserFragmentDirections.actionGlobalSearchEngineFragment(),
+            )
+        }
+        is SearchSelectorItemClicked -> {
+            appStore.dispatch(SearchEngineSelected(action.searchEngine, true))
+            appStore.dispatch(SearchStarted())
+            refreshConfigurationAfterSearchEngineChange(store, action.searchEngine)
+            updateSearchEndPageActions(store) // to update the visibility of the qr scanner button
+        }
+
+        is ClearSearchClicked -> {
+            Toolbar.buttonTapped.record(
+                Toolbar.ButtonTappedExtra(source = SOURCE_ADDRESS_BAR, item = ACTION_CLEAR_CLICKED),
+            )
+            store.dispatch(SearchQueryUpdated(BrowserToolbarQuery("")))
+        }
+
+        is SearchQueryUpdated -> {
+            maybeUpdateAutocompletions(store, action.query, action.isQueryPrefilled)
+            updateSearchEndPageActions(store)
+        }
+
+        is QrScannerClicked -> {
+            Toolbar.buttonTapped.record(
+                Toolbar.ButtonTappedExtra(source = SOURCE_ADDRESS_BAR, item = ACTION_QR_CLICKED),
+            )
+            observeQrScannerInput(store)
+            appStore.dispatch(QrScannerRequested)
+        }
+
+        is VoiceSearchButtonClicked -> {
+            Toolbar.buttonTapped.record(
+                Toolbar.ButtonTappedExtra(source = SOURCE_ADDRESS_BAR, item = ACTION_MICROPHONE_CLICKED),
+            )
+            appStore.dispatch(VoiceInputRequested)
+        }
+
+        else -> {
+            // no-op.
         }
     }
 
     private fun openSearchOrUrl(text: String, navController: NavController) {
         val searchEngine = reconcileSelectedEngine()
-        val isDefaultEngine = searchEngine?.id == browserStore.state.search.selectedOrDefaultSearchEngine?.id
+        val isDefaultEngine = (
+            searchEngine?.id == browserStore.state.search
+                .selectedOrDefaultSearchEngine(private = browsingModeManager.mode.isPrivate)?.id
+        )
         val newTab = if (settings.enableHomepageAsNewTab) {
             false
         } else {
-            appStore.state.searchState.sourceTabId == null
+            // Create a new tab if the source for where the search originated is not available.
+            appStore.state.searchState.sourceTabId?.run {
+                browserStore.state.findTab(this) == null
+            } ?: true
         }
 
         navController.navigate(
@@ -314,7 +334,7 @@ class BrowserToolbarSearchMiddleware(
             searchTermOrURL = text,
             newTab = newTab,
             forceSearch = !isDefaultEngine,
-            private = appStore.state.mode.isPrivate,
+            private = browsingModeManager.mode.isPrivate,
             searchEngine = searchEngine,
         )
 
@@ -342,7 +362,7 @@ class BrowserToolbarSearchMiddleware(
         searchEngine: SearchEngine?,
     ) {
         updateSearchSelectorMenu(store, searchEngine, browserStore.state.search.searchEngineShortcuts)
-        updateAutocompletions(store, store.state.editState.query)
+        maybeUpdateAutocompletions(store, store.state.editState.query)
         updateToolbarHint(store, searchEngine)
     }
 
@@ -350,7 +370,9 @@ class BrowserToolbarSearchMiddleware(
         store: Store<BrowserToolbarState, BrowserToolbarAction>,
         engine: SearchEngine?,
     ) {
-        val defaultEngine = browserStore.state.search.selectedOrDefaultSearchEngine
+        val defaultEngine = browserStore.state.search.selectedOrDefaultSearchEngine(
+            private = browsingModeManager.mode.isPrivate,
+        )
         val hintRes = engine.toolbarHintRes(defaultEngine)
         store.dispatch(HintUpdated(hintRes))
     }
@@ -378,40 +400,47 @@ class BrowserToolbarSearchMiddleware(
         )
     }
 
-    private fun buildAutocompleteProvidersList(selectedSearchEngine: SearchEngine?) = when (selectedSearchEngine?.id) {
-        browserStore.state.search.selectedOrDefaultSearchEngine?.id -> listOfNotNull(
-            when (settings.shouldShowHistorySuggestions) {
-                true -> components.core.historyStorage
-                false -> null
-            },
-            when (settings.shouldShowBookmarkSuggestions) {
-                true -> components.core.bookmarksStorage
-                false -> null
-            },
-            components.core.domainsAutocompleteProvider,
-        )
+    private fun buildAutocompleteProvidersList(selectedSearchEngine: SearchEngine?): List<AutocompleteProvider> {
+        val defaultEngineId = browserStore.state.search.selectedOrDefaultSearchEngine(
+            private = browsingModeManager.mode.isPrivate,
+        )?.id
+        return when (selectedSearchEngine?.id) {
+            defaultEngineId -> listOfNotNull(
+                when (settings.shouldShowHistorySuggestions) {
+                    true -> components.core.historyStorage
+                    false -> null
+                },
+                when (settings.shouldShowBookmarkSuggestions) {
+                    true -> components.core.bookmarksStorage
+                    false -> null
+                },
+                components.core.domainsAutocompleteProvider,
+            )
 
-        TABS_SEARCH_ENGINE_ID -> listOf(
-            components.core.sessionAutocompleteProvider,
-            components.backgroundServices.syncedTabsAutocompleteProvider,
-        )
+            TABS_SEARCH_ENGINE_ID -> listOf(
+                components.core.sessionAutocompleteProvider,
+                components.backgroundServices.syncedTabsAutocompleteProvider,
+            )
 
-        BOOKMARKS_SEARCH_ENGINE_ID -> listOf(
-            components.core.bookmarksStorage,
-        )
+            BOOKMARKS_SEARCH_ENGINE_ID -> listOf(
+                components.core.bookmarksStorage,
+            )
 
-        HISTORY_SEARCH_ENGINE_ID -> listOf(
-            components.core.historyStorage,
-        )
+            HISTORY_SEARCH_ENGINE_ID -> listOf(
+                components.core.historyStorage,
+            )
 
-        else -> emptyList()
+            else -> emptyList()
+        }
     }
 
-    private fun updateAutocompletions(
+    private fun maybeUpdateAutocompletions(
         store: Store<BrowserToolbarState, BrowserToolbarAction>,
         query: BrowserToolbarQuery,
+        shouldAvoidAutocompletions: Boolean = store.state.editState.isQueryPrefilled,
     ) {
         updateAutocompleteJob?.cancelChildren()
+        if (shouldAvoidAutocompletions) return
 
         // Update suggestions only if feature is not disabled and user is not backspacing.
         val shouldCheckForSuggestions = settings.shouldAutocompleteInAwesomebar && query.current.isNotEmpty()
@@ -474,7 +503,9 @@ class BrowserToolbarSearchMiddleware(
 
     private fun reconcileSelectedEngine(): SearchEngine? =
         appStore.state.searchState.selectedSearchEngine?.searchEngine
-            ?: browserStore.state.search.selectedOrDefaultSearchEngine
+            ?: browserStore.state.search.selectedOrDefaultSearchEngine(
+                private = browsingModeManager.mode.isPrivate,
+            )
 
     private fun updateSearchEndPageActions(
         store: Store<BrowserToolbarState, BrowserToolbarAction>,
@@ -536,14 +567,15 @@ class BrowserToolbarSearchMiddleware(
                         appStore.dispatch(AppAction.QrScannerAction.QrScannerInputConsumed)
                         store.dispatch(
                             SearchQueryUpdated(
-                                BrowserToolbarQuery(it.qrScannerState.lastScanData),
+                                query = BrowserToolbarQuery(it.qrScannerState.lastScanData),
+                                isQueryPrefilled = true,
                             ),
                         )
                         components.useCases.fenixBrowserUseCases.loadUrlOrSearch(
                             searchTermOrURL = it.qrScannerState.lastScanData,
                             newTab = appStore.state.searchState.sourceTabId == null,
                             flags = EngineSession.LoadUrlFlags.external(),
-                            private = appStore.state.mode.isPrivate,
+                            private = browsingModeManager.mode.isPrivate,
                         )
                         navController.navigate(R.id.action_global_browser)
                     }

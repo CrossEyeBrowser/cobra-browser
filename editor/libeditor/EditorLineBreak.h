@@ -1,12 +1,9 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef EditorLineBreak_h
 #define EditorLineBreak_h
-
-#include <fmt/format.h>
 
 #include "EditorDOMPoint.h"
 #include "EditorForwards.h"
@@ -266,11 +263,15 @@ class EditorLineBreakBase {
       const dom::Element* aAncestorLimiter = nullptr) const;
   [[nodiscard]] bool IsFollowedByCurrentBlockBoundary(
       const dom::Element* aAncestorLimiter = nullptr) const;
+  [[nodiscard]] bool IsFollowingCurrentBlockBoundary(
+      const dom::Element* aAncestorLimiter = nullptr) const;
   [[nodiscard]] bool IsFollowedByLineBoundary(
       const dom::Element* aAncestorLimiter = nullptr) const;
   [[nodiscard]] bool IsFollowingLineBoundary(
       const dom::Element* aAncestorLimiter = nullptr) const;
   [[nodiscard]] bool IsFollowingAnotherLineBreak(
+      const dom::Element* aAncestorLimiter = nullptr) const;
+  [[nodiscard]] bool IsPaddingForEmptyBlock(
       const dom::Element* aAncestorLimiter = nullptr) const;
   [[nodiscard]] bool IsUnnecessary(
       PaddingForEmptyBlock aPaddingForEmptyBlock,

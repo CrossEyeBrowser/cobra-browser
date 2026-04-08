@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -7,6 +5,9 @@
 // Documentation for libpref is in modules/libpref/docs/index.rst.
 
 #include <ctype.h>
+#ifdef NIGHTLY_BUILD
+#  include <regex>
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -2098,7 +2099,6 @@ class Parser {
                               HandlePref, HandleError);
   }
 
- private:
   static void HandlePref(const char* aPrefName, PrefType aType,
                          PrefValueKind aKind, PrefValue aValue, bool aIsSticky,
                          bool aIsLocked) {
@@ -2135,6 +2135,17 @@ class Parser {
   }
 };
 
+static nsresult parsePrefFileData(PrefValueKind aKind, const char* aPath,
+                                  const nsCString& aData,
+                                  PrefsParserPrefFn aPrefFn,
+                                  PrefsParserErrorFn aErrorFn) {
+  if (!prefs_parser_parse(aPath, aKind, aData.get(), aData.Length(), aPrefFn,
+                          aErrorFn)) {
+    return NS_ERROR_FILE_CORRUPTED;
+  }
+  return NS_OK;
+}
+
 // The following code is test code for the gtest.
 
 static void TestParseErrorHandlePref(const char* aPrefName, PrefType aType,
@@ -2152,15 +2163,16 @@ static void TestParseErrorHandleError(const char* aFullMsg,
 }
 
 // Keep this in sync with the declaration in test/gtest/Parser.cpp.
-void TestParseError(PrefValueKind aKind, const char* aText,
-                    nsCString& aErrorMsg) {
-  prefs_parser_parse("test", aKind, aText, strlen(aText),
-                     TestParseErrorHandlePref, TestParseErrorHandleError);
-
-  // Copy the error messages into the outparam, then clear them from
-  // gTestParseErrorMsgs.
-  aErrorMsg.Assign(gTestParseErrorMsgs);
+nsresult TestParseError(PrefValueKind aKind, const char* aText,
+                        nsCString& aErrorMsg) {
+  nsCString text(aText);
   gTestParseErrorMsgs.Truncate();
+  nsresult rv = parsePrefFileData(aKind, "test", text, TestParseErrorHandlePref,
+                                  TestParseErrorHandleError);
+
+  // Copy the error messages into the outparam
+  aErrorMsg.Assign(gTestParseErrorMsgs);
+  return rv;
 }
 
 //===========================================================================
@@ -4853,19 +4865,11 @@ static nsresult openPrefFile(nsIFile* aFile, PrefValueKind aKind) {
 
   nsCString data = MOZ_TRY(URLPreloader::ReadFile(aFile));
 
-  nsAutoString filenameUtf16;
-  aFile->GetLeafName(filenameUtf16);
-  NS_ConvertUTF16toUTF8 filename(filenameUtf16);
-
   nsAutoString path;
   aFile->GetPath(path);
 
-  Parser parser;
-  if (!parser.Parse(aKind, NS_ConvertUTF16toUTF8(path).get(), data)) {
-    return NS_ERROR_FILE_CORRUPTED;
-  }
-
-  return NS_OK;
+  return parsePrefFileData(aKind, NS_ConvertUTF16toUTF8(path).get(), data,
+                           Parser::HandlePref, Parser::HandleError);
 }
 
 static nsresult parsePrefData(const nsCString& aData, PrefValueKind aKind) {
@@ -5017,7 +5021,7 @@ struct Internals {
     NS_ENSURE_TRUE(Preferences::InitStaticMembers(), NS_ERROR_NOT_AVAILABLE);
 
     if (Maybe<PrefWrapper> pref = pref_Lookup(aPrefName)) {
-      rv = pref->GetValue(aKind, std::forward<T>(aResult));
+      rv = pref->GetValue(aKind, aResult);
 
       if (profiler_thread_is_being_profiled_for_markers()) {
         profiler_add_marker(

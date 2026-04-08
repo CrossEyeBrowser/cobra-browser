@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -998,6 +996,18 @@ JS::GenericMicroTask js::MicroTaskQueueSet::popFront() {
   return JS::NullValue();
 }
 
+JS::GenericMicroTask js::MicroTaskQueueSet::peekFront() {
+  JS_LOG(mtq, Info, "JS Peek Queue");
+  if (!debugMicroTaskQueue.empty()) {
+    return debugMicroTaskQueue.front();
+  }
+  if (!microTaskQueue.empty()) {
+    return microTaskQueue.front();
+  }
+
+  return JS::NullValue();
+}
+
 bool js::MicroTaskQueueSet::enqueueRegularMicroTask(
     JSContext* cx, const JS::GenericMicroTask& entry) {
   JS_LOG(mtq, Verbose, "JS: Enqueue Regular MT");
@@ -1046,6 +1056,10 @@ JS_PUBLIC_API JS::GenericMicroTask JS::DequeueNextMicroTask(JSContext* cx) {
 JS_PUBLIC_API JS::GenericMicroTask JS::DequeueNextDebuggerMicroTask(
     JSContext* cx) {
   return cx->microTaskQueues->popDebugFront();
+}
+
+JS_PUBLIC_API JS::GenericMicroTask JS::PeekNextMicroTask(JSContext* cx) {
+  return cx->microTaskQueues->peekFront();
 }
 
 JS_PUBLIC_API bool JS::HasAnyMicroTasks(JSContext* cx) {

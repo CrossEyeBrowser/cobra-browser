@@ -11,17 +11,23 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import com.google.android.play.core.review.ReviewManagerFactory
+import mozilla.components.concept.ai.controls.AIFeatureBlock
+import mozilla.components.concept.ai.controls.AIFeatureRegistry
 import mozilla.components.feature.addons.AddonManager
 import mozilla.components.feature.addons.amo.AMOAddonsProvider
 import mozilla.components.feature.addons.migration.DefaultSupportedAddonsChecker
 import mozilla.components.feature.addons.update.DefaultAddonUpdater
 import mozilla.components.feature.autofill.AutofillConfiguration
+import mozilla.components.feature.summarize.PageSummaryFeature
+import mozilla.components.feature.summarize.settings.SummarizationSettings
+import mozilla.components.lib.ai.controls.default
 import mozilla.components.lib.crash.store.CrashAction
 import mozilla.components.lib.crash.store.CrashMiddleware
 import mozilla.components.lib.integrity.googleplay.GooglePlayIntegrityClient
 import mozilla.components.lib.integrity.googleplay.GoogleProjectNumber
 import mozilla.components.lib.integrity.googleplay.IntegrityManagerProvider
 import mozilla.components.lib.integrity.googleplay.TokenProviderFactory
+import mozilla.components.lib.llm.mlpa.MlpaTokenStorage
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import mozilla.components.service.fxrelay.eligibility.RelayEligibilityStore
 import mozilla.components.service.fxrelay.eligibility.middlewares.ClearLastUsedMiddleware
@@ -42,13 +48,14 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.autofill.AutofillConfirmActivity
 import org.mozilla.fenix.autofill.AutofillSearchActivity
 import org.mozilla.fenix.autofill.AutofillUnlockActivity
-import org.mozilla.fenix.browser.browsingmode.BrowsingModeMiddleware
 import org.mozilla.fenix.browser.relay.ErrorMessages
 import org.mozilla.fenix.browser.relay.RelayFeatureIntegration
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.appstate.setup.checklist.SetupChecklistState
 import org.mozilla.fenix.components.appstate.setup.checklist.getSetupChecklistCollection
+import org.mozilla.fenix.components.llm.Llm
+import org.mozilla.fenix.components.llm.ext.accessTokenProvider
 import org.mozilla.fenix.components.metrics.MetricsMiddleware
 import org.mozilla.fenix.crashes.CrashReportingAppMiddleware
 import org.mozilla.fenix.crashes.SettingsCrashReportCache
@@ -80,6 +87,8 @@ import org.mozilla.fenix.perf.StartupStateProvider
 import org.mozilla.fenix.perf.StrictModeManager
 import org.mozilla.fenix.perf.lazyMonitored
 import org.mozilla.fenix.reviewprompt.ReviewPromptMiddleware
+import org.mozilla.fenix.search.VoiceSearchAIControlFeature
+import org.mozilla.fenix.settings.datachoices.DataChoicesSearchProvider
 import org.mozilla.fenix.settings.settingssearch.DefaultFenixSettingsIndexer
 import org.mozilla.fenix.termsofuse.TermsOfUseManager
 import org.mozilla.fenix.termsofuse.store.DefaultTermsOfUsePromptRepository
@@ -224,9 +233,10 @@ class Components(private val context: Context) {
             isLargeScreenSize = context.isLargeScreenSize(),
         )
     }
-    val nimbus by lazyMonitored {
+    val nimbus: NimbusComponents by lazyMonitored {
         NimbusComponents(
             context = context,
+            engine = lazyMonitored { core.engine },
             remoteSettingsService = remoteSettingsService.value.remoteSettingsService,
         )
     }
@@ -297,7 +307,6 @@ class Components(private val context: Context) {
                 setupChecklistState = setupChecklistState(),
             ).run { filterState(blocklistHandler) },
             middlewares = listOf(
-                BrowsingModeMiddleware(settings),
                 ProfileMarkerMiddleware(markerName = "AppStore", profiler = core.engine.profiler),
                 LogMiddleware(tag = "AppStore", shouldIncludeDetailedData = { Config.channel.isDebug }),
                 BlocklistMiddleware(blocklistHandler),
@@ -328,6 +337,7 @@ class Components(private val context: Context) {
                 ReviewPromptMiddleware(
                     shouldUseNewTriggerCriteria = { settings.newReviewPromptTriggerCriteriaEnabled },
                     shouldShowCustomPrompt = { settings.customReviewPromptUiEnabled && settings.isTelemetryEnabled },
+                    disableCustomPrompt = { settings.customReviewPromptUiEnabled = false },
                     createJexlHelper = nimbus::createJexlHelper,
                     nimbusEventStore = nimbus.events,
                 ).also {
@@ -354,7 +364,7 @@ class Components(private val context: Context) {
         null
     }
 
-    val fxSuggest by lazyMonitored { FxSuggest(context, remoteSettingsService.value) }
+    val fxSuggest by lazyMonitored { FxSuggest(context, remoteSettingsService.value, analytics.crashReporter) }
 
     val distributionIdManager by lazyMonitored {
         DistributionIdManager(
@@ -385,7 +395,12 @@ class Components(private val context: Context) {
     }
 
     val settingsIndexer by lazyMonitored {
-        DefaultFenixSettingsIndexer(context)
+        DefaultFenixSettingsIndexer(
+            context = context,
+            additionalProviders = listOf(
+                DataChoicesSearchProvider,
+            ),
+        )
     }
 
     val ads by lazyMonitored {
@@ -409,8 +424,36 @@ class Components(private val context: Context) {
         )
     }
 
+    val aiFeatureRegistry by lazyMonitored {
+        AIFeatureRegistry.default().also {
+            if (settings.shakeToSummarizeFeatureFlagEnabled) {
+                it.register(PageSummaryFeature(SummarizationSettings.dataStore(context)))
+            }
+            it.register(
+                VoiceSearchAIControlFeature(
+                    settings = context.settings(),
+                    onUpdateWidget = { VoiceSearchAIControlFeature.updateWidget(context) },
+                ),
+            )
+        }
+    }
+
+    @Suppress("unused")
+    val aiControlsFeatureBlock by lazyMonitored {
+        AIFeatureBlock.default(
+            context,
+            registry = aiFeatureRegistry,
+        )
+    }
+
     val llm: Llm by lazyMonitored {
-        Llm(core.client, integrityClient, clientUUID)
+        Llm(
+            client = core.client,
+            storage = MlpaTokenStorage.sharedPrefs(context),
+            fxaTokenProvider = backgroundServices.accountManager.accessTokenProvider,
+            integrityClient = integrityClient,
+            userIdProvider = clientUUID,
+        )
     }
 
     val clientUUID by lazyMonitored { ClientUUID.build(context) }

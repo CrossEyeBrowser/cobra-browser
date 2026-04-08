@@ -20,6 +20,7 @@
 #include "mozilla/IOInterposer.h"
 #include "mozilla/ipc/UtilityProcessChild.h"
 #include "mozilla/Likely.h"
+#include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PreferenceSheet.h"
 #include "mozilla/Printf.h"
@@ -54,6 +55,8 @@
 
 #ifdef XP_MACOSX
 #  include "nsVersionComparator.h"
+#  include "nsCocoaFeatures.h"
+#  include "mozilla/glean/WidgetCocoaMetrics.h"
 #  include "MacLaunchHelper.h"
 #  include "MacApplicationDelegate.h"
 #  include "MacAutoreleasePool.h"
@@ -994,21 +997,13 @@ bool FissionAutostart() {
 
 namespace mozilla {
 
-bool SessionHistoryInParent() {
-  return FissionAutostart() ||
-         !StaticPrefs::
-             fission_disableSessionHistoryInParent_AtStartup_DoNotUseDirectly();
-}
-
 bool SessionStorePlatformCollection() {
-  return SessionHistoryInParent() &&
-         !StaticPrefs::
-             browser_sessionstore_disable_platform_collection_AtStartup_DoNotUseDirectly();
+  return !StaticPrefs::
+      browser_sessionstore_disable_platform_collection_AtStartup_DoNotUseDirectly();
 }
 
 bool BFCacheInParent() {
-  return SessionHistoryInParent() &&
-         StaticPrefs::fission_bfcacheInParent_DoNotUseDirectly();
+  return StaticPrefs::fission_bfcacheInParent_DoNotUseDirectly();
 }
 
 }  // namespace mozilla
@@ -1392,12 +1387,6 @@ nsXULAppInfo::GetFissionDecisionStatusString(nsACString& aResult) {
     default:
       MOZ_ASSERT_UNREACHABLE("Unexpected enum value");
   }
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsXULAppInfo::GetSessionHistoryInParent(bool* aResult) {
-  *aResult = SessionHistoryInParent();
   return NS_OK;
 }
 
@@ -1851,14 +1840,6 @@ nsXULAppInfo::IsAnnotationValid(const nsACString& aValue, bool* aIsValid) {
 }
 
 NS_IMETHODIMP
-nsXULAppInfo::IsAnnotationAllowedForPing(const nsACString& aValue,
-                                         bool* aIsAllowed) {
-  CrashReporter::Annotation annotation = MOZ_TRY(GetCrashAnnotation(aValue));
-  *aIsAllowed = CrashReporter::IsAnnotationAllowedForPing(annotation);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
 nsXULAppInfo::IsAnnotationAllowedForReport(const nsACString& aValue,
                                            bool* aIsAllowed) {
   CrashReporter::Annotation annotation = MOZ_TRY(GetCrashAnnotation(aValue));
@@ -2302,6 +2283,9 @@ static void SetupAlteredPrefetchPref() {
                                 PREF_WIN_ALTERED_DLL_PREFETCH);
 }
 
+static LazyLogModule gSkeletonLog("PreXULSkeletonUI");
+#  define SKELETON_LOG(str, ...) \
+    MOZ_LOG(gSkeletonLog, LogLevel::Debug, (str, ##__VA_ARGS__))
 static void ReflectSkeletonUIPrefToRegistry(const char* aPref, void* aData) {
   (void)aPref;
   (void)aData;
@@ -2309,11 +2293,20 @@ static void ReflectSkeletonUIPrefToRegistry(const char* aPref, void* aData) {
   RefPtr<nsToolkitProfileService> mProfileSvc;
   mProfileSvc = NS_GetToolkitProfileService();
 
-  bool shouldBeEnabled =
-      !mProfileSvc->HasShowProfileSelector() &&
-      Preferences::GetBool(kPrefPreXulSkeletonUI, false) &&
-      Preferences::GetBool(kPrefBrowserStartupBlankWindow, false) &&
-      LookAndFeel::DrawInTitlebar();
+  bool hasShowProfileSelector = mProfileSvc->HasShowProfileSelector();
+  bool skeletonUIPref = StaticPrefs::browser_startup_preXulSkeletonUI();
+  bool startupBlankWindowPref = StaticPrefs::browser_startup_blankWindow();
+  bool drawInTitlebar = LookAndFeel::DrawInTitlebar();
+  SKELETON_LOG(
+      "ReflectSkeletonUIPrefToRegistry: hasShowProfileSelector %d, "
+      "skeletonUIPref %d, startupBlankWindowPref %d, drawInTitlebar %d",
+      hasShowProfileSelector ? 1 : 0, skeletonUIPref ? 1 : 0,
+      startupBlankWindowPref ? 1 : 0, drawInTitlebar ? 1 : 0);
+
+  bool shouldBeEnabled = !hasShowProfileSelector && skeletonUIPref &&
+                         startupBlankWindowPref && drawInTitlebar;
+  SKELETON_LOG("ReflectSkeletonUIPrefToRegistry: shouldBeEnabled %d",
+               shouldBeEnabled ? 1 : 0);
   if (shouldBeEnabled && Preferences::HasUserValue(kPrefThemeId)) {
     nsCString themeId;
     Preferences::GetCString(kPrefThemeId, themeId);
@@ -2324,16 +2317,25 @@ static void ReflectSkeletonUIPrefToRegistry(const char* aPref, void* aData) {
     } else if (themeId.EqualsLiteral("firefox-compact-light@mozilla.org")) {
       (void)SetPreXULSkeletonUIThemeId(ThemeMode::Light);
     } else {
+      SKELETON_LOG(
+          "ReflectSkeletonUIPrefToRegistry: clearing shouldBeEnabled "
+          "because of bad themeId %s",
+          themeId.get());
       shouldBeEnabled = false;
     }
   } else if (shouldBeEnabled) {
     (void)SetPreXULSkeletonUIThemeId(ThemeMode::Default);
   }
 
+  SKELETON_LOG(
+      "ReflectSkeletonUIPrefToRegistry: old enabled %d, new enabled "
+      "%d",
+      GetPreXULSkeletonUIEnabled() ? 1 : 0, shouldBeEnabled ? 1 : 0);
   if (GetPreXULSkeletonUIEnabled() != shouldBeEnabled) {
     (void)SetPreXULSkeletonUIEnabledIfAllowed(shouldBeEnabled);
   }
 }
+#  undef SKELETON_LOG
 
 class ShowProfileSelectorObserver final : public nsIObserver {
  public:
@@ -3131,6 +3133,17 @@ static nsresult SelectProfile(nsToolkitProfileService* aProfileSvc,
   if (gDoProfileReset && !*aProfile) {
     NS_WARNING("Profile reset is only supported for named profiles.");
     return NS_ERROR_ABORT;
+  }
+
+  // Block reset without migration for selectable profiles.
+  // Bug 2020801: Update this to allow resetting without migration
+  if (gDoProfileReset && !gDoMigration && *aProfile) {
+    nsCString storeID;
+    (*aProfile)->GetStoreID(storeID);
+    if (!storeID.IsVoid()) {
+      NS_WARNING("Selectable profiles cannot be reset without migration.");
+      return NS_ERROR_ABORT;
+    }
   }
 
   // No profile could be found. This generally shouldn't happen, a new profile
@@ -5375,6 +5388,13 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
   CrashReporter::RecordAnnotationBool(
       CrashReporter::Annotation::StartupCacheValid, cachesOK && versionOK);
 
+#ifdef XP_MACOSX
+  static bool status = nsCocoaFeatures::ProcessIsRosettaTranslated();
+  CrashReporter::RecordAnnotationBool(CrashReporter::Annotation::RosettaStatus,
+                                      status);
+  mozilla::glean::widget::rosetta_status.Set(status);
+#endif
+
   // Every time a profile is loaded by a build with a different version,
   // it updates the compatibility.ini file saying what version last wrote
   // the fastload caches.  On subsequent launches if the version matches,
@@ -5596,18 +5616,38 @@ nsresult XREMain::XRE_mainRun() {
             do_CreateInstance(NS_PROFILEMIGRATOR_CONTRACTID));
         if (pm) {
           nsAutoCString aKey;
-          nsAutoCString aName;
+          nsAutoCString aProfilePath;
           if (gDoProfileReset) {
             // Automatically migrate from the current application if we just
             // reset the profile.
-            aKey = MOZ_APP_NAME;
-            gResetOldProfile->GetName(aName);
+            nsCOMPtr<nsIFile> rootDir = gResetOldProfile->GetRootDir();
+            nsAutoString path;
+            rootDir->GetPath(path);
+            CopyUTF16toUTF8(path, aProfilePath);
+
+            nsCString storeID;
+            gResetOldProfile->GetStoreID(storeID);
+            if (!storeID.IsVoid()) {
+              aKey = "firefox-selectable-profile";
+              // In the case that Firefox is launched with --reset-profile,
+              // the storeID and path env variables won't be set, so we set
+              // them here if we are in a profile with a storeID.
+              nsAutoCString envStoreID("SELECTABLE_PROFILE_RESET_STORE_ID=");
+              envStoreID.Append(storeID);
+              SaveToEnv(envStoreID.get());
+
+              nsAutoCString envProfilePath("SELECTABLE_PROFILE_RESET_PATH=");
+              envProfilePath.Append(aProfilePath);
+              SaveToEnv(envProfilePath.get());
+            } else {
+              aKey = MOZ_APP_NAME;
+            }
           }
 #ifdef XP_MACOSX
           // Necessary for migration wizard to be accessible.
           InitializeMacApp();
 #endif
-          pm->Migrate(&mDirProvider, aKey, aName);
+          pm->Migrate(&mDirProvider, aKey, aProfilePath);
         }
       }
 

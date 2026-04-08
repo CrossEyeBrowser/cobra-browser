@@ -10,8 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import mozilla.components.concept.llm.CloudLlmProvider
 import mozilla.components.concept.llm.Llm
+import mozilla.components.concept.llm.LlmProvider
 import mozilla.components.concept.llm.LocalLlmProvider
 import mozilla.components.concept.llm.Prompt
+import mozilla.components.feature.summarize.R
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -25,6 +27,8 @@ data class FakeCloudProvider(
     override val state: MutableStateFlow<CloudLlmProvider.State> = MutableStateFlow(CloudLlmProvider.State.Available),
     val llm: Llm,
 ) : CloudLlmProvider {
+    override val info = LlmProvider.Info(nameRes = R.string.mozac_summarize_fake_llm_name)
+
     override suspend fun prepare() {
         state.value = CloudLlmProvider.State.Ready(llm)
     }
@@ -36,25 +40,29 @@ data class FakeCloudProvider(
  * Emits each item in [responses] sequentially, with a 2-second delay between
  * each emission to simulate real LLM streaming latency.
  *
- * @property responses The ordered list of [Llm.Response] values to emit when [prompt] is called.
+ * @property responses values to emit.
  */
 data class FakeLlm(
-    val responses: List<Llm.Response> = listOf(),
+    val responses: List<String> = listOf(),
 ) : Llm {
-    override suspend fun prompt(prompt: Prompt): Flow<Llm.Response> = flow {
+
+    var promptCapture = ""
+
+    override suspend fun prompt(prompt: Prompt): Flow<String> = flow {
         for (response in responses) {
             emit(response)
             delay(2.seconds)
         }
+    }.also {
+        promptCapture = prompt.value
     }
 
     companion object {
         val successful get() = FakeLlm(
             listOf(
-                Llm.Response.Success.ReplyPart("# This is the article\n"),
-                Llm.Response.Success.ReplyPart("This is some content...\n"),
-                Llm.Response.Success.ReplyPart("This is some *bold* content.\n"),
-                Llm.Response.Success.ReplyFinished,
+               "# This is the article\n",
+               "This is some content...\n",
+               "This is some *bold* content.\n",
             ),
         )
     }
@@ -66,6 +74,8 @@ internal data class FakeLocalProvider(
     ),
     val llm: Llm,
 ) : LocalLlmProvider {
+    override val info = LlmProvider.Info(nameRes = R.string.mozac_summarize_fake_llm_name)
+
     override suspend fun downloadIfNeeded() {
         state.value = LocalLlmProvider.State.Downloading(TOTAL_SIZE, INITIAL_SIZE)
         delay(0.5.seconds)

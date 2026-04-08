@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -1096,7 +1094,12 @@ class HTMLInputElement final : public TextControlElement,
    */
   bool DoesAutocompleteApply() const;
 
-  MOZ_CAN_RUN_SCRIPT void FreeData();
+  enum class TextControlStateDisposition : bool {
+    Destroy,
+    Reuse,
+  };
+
+  MOZ_CAN_RUN_SCRIPT void FreeData(TextControlStateDisposition);
   TextControlState* GetEditorState() const;
   void EnsureEditorState();
 
@@ -1546,6 +1549,7 @@ class HTMLInputElement final : public TextControlElement,
   bool mIsPreviewEnabled : 1;
   bool mHasBeenTypePassword : 1;
   bool mHasPatternAttribute : 1;
+  bool mUserChangedSinceFocus : 1;
 
  private:
   Maybe<int32_t> GetNumberInputCols() const;
@@ -1560,8 +1564,8 @@ class HTMLInputElement final : public TextControlElement,
   /**
    * Returns true if selection methods can be called on element
    */
-  bool SupportsTextSelection() const {
-    switch (mType) {
+  static bool SupportsTextSelection(FormControlType aType) {
+    switch (aType) {
       case FormControlType::InputText:
       case FormControlType::InputSearch:
       case FormControlType::InputUrl:
@@ -1572,6 +1576,8 @@ class HTMLInputElement final : public TextControlElement,
         return false;
     }
   }
+
+  bool SupportsTextSelection() const { return SupportsTextSelection(mType); }
 
   /**
    * https://html.spec.whatwg.org/#auto-directionality-form-associated-elements

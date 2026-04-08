@@ -1,4 +1,3 @@
-/* vim:set ts=4 sw=2 sts=2 et cin: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -31,17 +30,17 @@ ConnectionEntry::~ConnectionEntry() {
   MOZ_ASSERT(!mActiveConns.Length());
   MOZ_ASSERT(!PendingQueueLength());
   MOZ_ASSERT(!UrgentStartQueueLength());
-  MOZ_ASSERT(!mDoNotDestroy);
 }
 
-ConnectionEntry::ConnectionEntry(nsHttpConnectionInfo* ci)
+ConnectionEntry::ConnectionEntry(nsHttpConnectionInfo* ci,
+                                 nsTHashSet<ConnectionEntry*>& aPendingQSet)
     : mConnInfo(ci),
       mUsingSpdy(false),
       mCanUseSpdy(true),
       mPreferIPv4(false),
       mPreferIPv6(false),
       mUsedForConnection(false),
-      mDoNotDestroy(false) {
+      mPendingQSet(aPendingQSet) {
   LOG(("ConnectionEntry::ConnectionEntry this=%p key=%s", this,
        ci->HashKey().get()));
   mConnectionAttemptPool = new ConnectionAttemptPool(this);
@@ -58,7 +57,7 @@ bool ConnectionEntry::HasActiveH3Connection() const {
 }
 
 bool ConnectionEntry::AvailableForDispatchNow() {
-  if (mIdleConns.Length() && mIdleConns[0]->CanReuse()) {
+  if (mIdleConns.Length() && mIdleConns[0]->CanReuseLikely()) {
     return true;
   }
 
@@ -193,6 +192,7 @@ void ConnectionEntry::InsertTransaction(
   mPendingQ.InsertTransaction(pendingTransInfo,
                               aInsertAsFirstForTheSamePriority);
   pendingTransInfo->Transaction()->OnPendingQueueInserted(mConnInfo->HashKey());
+  mPendingQSet.EnsureInserted(this);
 }
 
 nsTArray<RefPtr<PendingTransactionInfo>>*
@@ -302,6 +302,13 @@ bool ConnectionEntry::RemoveFromIdleConnections(nsHttpConnection* conn) {
 
 void ConnectionEntry::CancelAllTransactions(nsresult reason) {
   mPendingQ.CancelAllTransactions(reason);
+  MaybeRemoveFromPendingSet();
+}
+
+void ConnectionEntry::MaybeRemoveFromPendingSet() {
+  if (PendingQueueIsEmpty() && UrgentStartQueueIsEmpty()) {
+    mPendingQSet.Remove(this);
+  }
 }
 
 nsresult ConnectionEntry::CloseIdleConnection(nsHttpConnection* conn) {
@@ -581,7 +588,12 @@ void ConnectionEntry::MakeAllDontReuseExcept(HttpConnectionBase* conn) {
 
   // Cancel any other pending connections - their associated transactions
   // are in the pending queue and will be dispatched onto this new connection
-  CloseAllConnectionAttempts();
+  // Skip this for fallback entries: their DnsAndConnectSockets are for
+  // FallbackTransactions whose real transactions are in the H3 entry, not
+  // here. Abandoning them would strand those transactions with no recovery.
+  if (!mConnInfo->GetFallbackConnection()) {
+    CloseAllConnectionAttempts();
+  }
 }
 
 bool ConnectionEntry::FindConnToClaim(
@@ -851,6 +863,13 @@ HttpRetParams ConnectionEntry::GetConnectionData() {
     data.idle.AppendElement(info);
   }
   mConnectionAttemptPool->GetConnectionData(data);
+  if (mConnInfo->IsHttp3()) {
+    data.httpVersion = "HTTP/3"_ns;
+  } else if (mUsingSpdy) {
+    data.httpVersion = "HTTP/2"_ns;
+  } else {
+    data.httpVersion = "HTTP <= 1.1"_ns;
+  }
   data.ssl = mConnInfo->EndToEndSSL();
   return data;
 }
@@ -923,6 +942,7 @@ bool ConnectionEntry::RemoveTransFromPendingQ(nsHttpTransaction* aTrans) {
   if (sock) {
     RemoveConnectionAttempt(sock, true);
   }
+  MaybeRemoveFromPendingSet();
   return true;
 }
 
@@ -983,9 +1003,7 @@ bool ConnectionEntry::MaybeProcessCoalescingKeys(nsIDNSAddrRecord* dnsRecord,
     }
     newKey.Truncate();
     newKey.SetCapacity(kIPv6CStrBufSize + suffix.Length() + 21);
-    newKey.SetLength(kIPv6CStrBufSize);
-    mAddresses[i].ToStringBuffer(newKey.BeginWriting(), kIPv6CStrBufSize);
-    newKey.SetLength(strlen(newKey.BeginReading()));
+    mAddresses[i].ToString(newKey);
     newKey.Append(anonFlag);
     newKey.Append(fallbackFlag);
     newKey.AppendInt(port);

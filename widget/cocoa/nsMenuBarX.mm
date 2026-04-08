@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -27,6 +26,7 @@
 
 #include "mozilla/Components.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/glean/WidgetCocoaMetrics.h"
 
 using namespace mozilla;
 using mozilla::dom::Element;
@@ -557,6 +557,8 @@ void nsMenuBarX::ResetNativeApplicationMenu() {
 void nsMenuBarX::SetNeedsRebuild() { mNeedsRebuild = true; }
 
 void nsMenuBarX::ApplicationMenuOpened() {
+  glean::widget::mac_application_menu_opened.Add(1);
+
   if (mNeedsRebuild) {
     if (!mMenuArray.IsEmpty()) {
       ResetNativeApplicationMenu();
@@ -789,7 +791,7 @@ void nsMenuBarX::CreateApplicationMenu(nsMenuX* aMenu) {
              key="open_prefs_key"/>
 
     We need to use this system for localization purposes, until we have a better
-    way to define the Application menu to be used on Mac OS X.
+    way to define the Application menu to be used on macOS.
   */
 
   if (sApplicationMenu) {
@@ -859,7 +861,7 @@ void nsMenuBarX::CreateApplicationMenu(nsMenuX* aMenu) {
     if (itemBeingAdded) {
       [sApplicationMenu addItem:itemBeingAdded];
 
-      // set this menu item up as the Mac OS X Services menu
+      // set this menu item up as the macOS Services menu
       NSMenu* servicesMenu = [[GeckoNSMenu alloc] initWithTitle:@""];
       itemBeingAdded.submenu = servicesMenu;
       NSApp.servicesMenu = servicesMenu;
@@ -1003,7 +1005,7 @@ void nsMenuBarX::CreateApplicationMenu(nsMenuX* aMenu) {
 // go through the mechanics so they'll give the proper visual
 // feedback.
 - (BOOL)performKeyEquivalent:(NSEvent*)aEvent {
-  // We've noticed that Mac OS X expects this check in subclasses before
+  // We've noticed that macOS expects this check in subclasses before
   // calling NSMenu's "performKeyEquivalent:".
   //
   // There is no case in which we'd need to do anything or return YES

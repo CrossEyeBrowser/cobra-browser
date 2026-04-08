@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -16,8 +14,10 @@
 #include "mozilla/ScopeExit.h"
 #include "mozilla/ServoBindings.h"
 #include "mozilla/ServoStyleRuleMap.h"
+#include "mozilla/ServoStyleSet.h"
 #include "mozilla/StyleSheet.h"
 #include "mozilla/dom/BindContext.h"
+#include "mozilla/dom/CustomElementRegistry.h"
 #include "mozilla/dom/DirectionalityUtils.h"
 #include "mozilla/dom/DocumentFragment.h"
 #include "mozilla/dom/Element.h"
@@ -113,6 +113,11 @@ ShadowRoot::~ShadowRoot() {
     OwnerDoc()->RemoveComposedDocShadowRoot(*this);
   }
   MOZ_DIAGNOSTIC_ASSERT(!OwnerDoc()->IsComposedDocShadowRoot(*this));
+
+  if (StaticPrefs::dom_scoped_custom_element_registries_enabled() &&
+      GetCustomElementRegistryState() == CustomElementRegistryState::Scoped) {
+    CustomElementRegistry::RemoveScopedRegistry(*this);
+  }
 }
 
 MOZ_DEFINE_MALLOC_SIZE_OF(ShadowRootAuthorStylesMallocSizeOf)
@@ -153,6 +158,15 @@ void ShadowRoot::CloneInternalDataFrom(ShadowRoot* aOther) {
   }
 
   CloneAdoptedSheetsFrom(*aOther);
+
+  // Clone built-in stylesheets that aren't associated to any node.
+  // Node-associated stylesheets get inserted when the node is cloned.
+  for (const auto& sheet : aOther->mStyleSheets) {
+    if (!sheet->GetOwnerNode()) [[unlikely]] {
+      RefPtr clone = sheet->Clone(nullptr, nullptr);
+      AppendStyleSheet(*clone);
+    }
+  }
 }
 
 nsresult ShadowRoot::Bind() {
@@ -206,15 +220,11 @@ void ShadowRoot::Unattach() {
 
 void ShadowRoot::InvalidateStyleAndLayoutOnSubtree(Element* aElement) {
   MOZ_ASSERT(aElement);
-  Document* doc = GetComposedDoc();
+  Document* doc = aElement->GetComposedDoc();
   if (!doc) {
-    return;
-  }
-
-  if (!aElement->IsInComposedDoc()) {
-    // If RemoveSlot is called from UnbindFromTree while we're moving
-    // (moveBefore) the slot elsewhere, invalidating styles and layout tree
-    // is done explicitly elsewhere.
+    // If not potentially in the flat tree, we don't need to invalidate, really.
+    // For tricky cases like moveBefore, invalidating styles and layout tree
+    // is done explicitly elsewhere as well.
     return;
   }
 
@@ -1005,4 +1015,53 @@ void ShadowRoot::NotifyReferenceTargetChangedObservers() {
     return;
   }
   host->NotifyReferenceTargetChanged();
+}
+
+void ShadowRoot::SetCustomElementRegistry(CustomElementRegistry* aRegistry) {
+  MOZ_ASSERT(StaticPrefs::dom_scoped_custom_element_registries_enabled());
+  MOZ_ASSERT(!HasCustomElementRegistry(),
+             "We shouldn't set a custom element registry without clearing "
+             "first");
+  MOZ_ASSERT(aRegistry,
+             "We shouldn't be setting a null custom element "
+             "registry via this method");
+  if (aRegistry->IsScoped()) {
+    SetCustomElementRegistryState(CustomElementRegistryState::Scoped);
+    CustomElementRegistry::SetScopedRegistry(*this, *aRegistry);
+  } else {
+    MOZ_ASSERT(aRegistry == OwnerDoc()->GetCustomElementRegistry(),
+               "Tried to set a global registry different to docs");
+    SetCustomElementRegistryState(CustomElementRegistryState::Global);
+  }
+}
+
+/* https://dom.spec.whatwg.org/#shadowroot-keep-custom-element-registry-null */
+void ShadowRoot::SetKeepCustomElementRegistryNull() {
+  MOZ_ASSERT(StaticPrefs::dom_scoped_custom_element_registries_enabled());
+  MOZ_ASSERT(!HasCustomElementRegistry(),
+             "We shouldn't set a custom element registry without clearing "
+             "first");
+  SetCustomElementRegistryState(CustomElementRegistryState::Null);
+}
+
+/* https://dom.spec.whatwg.org/#shadowroot-custom-element-registry */
+CustomElementRegistry* ShadowRoot::GetCustomElementRegistry() {
+  MOZ_ASSERT(StaticPrefs::dom_scoped_custom_element_registries_enabled());
+  switch (GetCustomElementRegistryState()) {
+    case CustomElementRegistryState::Global:
+      if (Document* doc = OwnerDoc()) {
+        return doc->GetEffectiveGlobalCustomElementRegistry();
+      }
+      return nullptr;
+    case CustomElementRegistryState::Null:
+      return nullptr;
+    case CustomElementRegistryState::Scoped: {
+      RefPtr<CustomElementRegistry> registry =
+          CustomElementRegistry::GetScopedRegistry(*this);
+      MOZ_ASSERT(registry);
+      return registry;
+    }
+  }
+  MOZ_ASSERT_UNREACHABLE("Invalid CustomElementRegistryState");
+  return nullptr;
 }

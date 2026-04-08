@@ -117,13 +117,11 @@ class AwesomeBarComposable(
             state.showClipboardSuggestions,
             state.query,
             state.clipboardHasUrl,
-            state.showSearchShortcuts,
         ) {
             derivedStateOf {
                 state.showClipboardSuggestions &&
                         state.query.isEmpty() &&
-                        state.clipboardHasUrl &&
-                        !state.showSearchShortcuts
+                        state.clipboardHasUrl
             }
         }
         val view = LocalView.current
@@ -148,7 +146,7 @@ class AwesomeBarComposable(
                 onClick = {
                     url?.let {
                         toolbarStore.dispatch(
-                            SearchQueryUpdated(query = BrowserToolbarQuery(url), isQueryPrefilled = false),
+                            SearchQueryUpdated(query = BrowserToolbarQuery(url), isQueryPrefilled = true),
                         )
                     }
                 },
@@ -247,7 +245,7 @@ class AwesomeBarComposable(
                 onClick = {
                     url?.let {
                         toolbarStore.dispatch(
-                            SearchQueryUpdated(query = BrowserToolbarQuery(url), isQueryPrefilled = false),
+                            SearchQueryUpdated(query = BrowserToolbarQuery(url), isQueryPrefilled = true),
                         )
                     }
                 },
@@ -270,14 +268,15 @@ class AwesomeBarComposable(
             initialState = it,
             middleware = listOf(
                 BrowserToolbarToFenixSearchMapperMiddleware(
-                    appStore = appStore,
                     toolbarStore = toolbarStore,
+                    browsingModeManager = activity.browsingModeManager,
                     scope = lifecycleScope,
                     browserStore = browserStore,
                 ),
                 BrowserStoreToFenixSearchMapperMiddleware(
                     browserStore = browserStore,
                     scope = lifecycleScope,
+                    appStore = components.appStore,
                 ),
                 FenixSearchMiddleware(
                     fragment = fragment,
@@ -289,6 +288,7 @@ class AwesomeBarComposable(
                     browserStore = browserStore,
                     toolbarStore = toolbarStore,
                     navController = navController,
+                    browsingModeManager = activity.browsingModeManager,
                 ),
             ),
         )

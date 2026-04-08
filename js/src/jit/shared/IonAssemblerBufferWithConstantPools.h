@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -8,9 +6,9 @@
 #define jit_shared_IonAssemblerBufferWithConstantPools_h
 
 #include "mozilla/CheckedInt.h"
-#include "mozilla/MathAlgorithms.h"
 
 #include <algorithm>
+#include <bit>
 #include <deque>
 
 #include "jit/JitSpewer.h"
@@ -1177,7 +1175,7 @@ struct AssemblerBufferWithConstantPools : public AssemblerBuffer<Inst> {
   void align(unsigned alignment) { align(alignment, alignFillInst_); }
 
   void align(unsigned alignment, uint32_t pattern) {
-    MOZ_ASSERT(mozilla::IsPowerOfTwo(alignment));
+    MOZ_ASSERT(std::has_single_bit(alignment));
     MOZ_ASSERT(alignment >= InstSize);
 
     // A pool many need to be dumped at this point, so insert NOP fill here.

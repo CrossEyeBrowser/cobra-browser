@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+@import url("chrome://global/content/elements/moz-badge.tokens.css");
+
 menupopup,
 panel {
   --menu-arrow-opacity: 1;
@@ -56,7 +58,8 @@ menupopup {
        they are considered template images. Template images should be used
        whenever possible so that the OS can manage the icon color, as the OS
        theme may differ from our theme. */
-    menubar[native] & {
+    menubar[native] &,
+    &:not([native="false"]) {
       --menuitem-icon-fill: black;
     }
   }

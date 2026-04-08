@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -270,7 +268,7 @@ nsDirEnumeratorUnix::Close() {
   return NS_OK;
 }
 
-nsLocalFile::nsLocalFile() {}
+nsLocalFile::nsLocalFile() = default;
 
 nsLocalFile::nsLocalFile(const nsLocalFile& aOther) : mPath(aOther.mPath) {}
 
@@ -1793,11 +1791,12 @@ nsresult nsLocalFile::GetDiskInfo(StatInfoFunc&& aStatInfoFunc,
 
 NS_IMETHODIMP
 nsLocalFile::GetDiskSpaceAvailable(int64_t* aDiskSpaceAvailable) {
+#ifdef STATFS
   return GetDiskInfo(
       [](const struct STATFS& aStatInfo) {
         return aStatInfo.f_bavail * static_cast<uint64_t>(aStatInfo.F_BSIZE);
       },
-#if defined(USE_LINUX_QUOTACTL)
+#  if defined(USE_LINUX_QUOTACTL)
       [](const struct dqblk& aQuotaInfo) -> uint64_t {
         // dqb_bhardlimit is count of BLOCK_SIZE blocks, dqb_curspace is bytes
         const uint64_t hardlimit = aQuotaInfo.dqb_bhardlimit * BLOCK_SIZE;
@@ -1806,23 +1805,40 @@ nsLocalFile::GetDiskSpaceAvailable(int64_t* aDiskSpaceAvailable) {
         }
         return 0;
       },
-#endif
+#  endif
       aDiskSpaceAvailable);
+#else
+#  ifdef DEBUG
+  printf(
+      "ERROR: GetDiskSpaceAvailable: Not implemented for plaforms without "
+      "statfs.\n");
+#  endif
+  return NS_ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 NS_IMETHODIMP
 nsLocalFile::GetDiskCapacity(int64_t* aDiskCapacity) {
+#ifdef STATFS
   return GetDiskInfo(
       [](const struct STATFS& aStatInfo) {
         return aStatInfo.f_blocks * static_cast<uint64_t>(aStatInfo.F_BSIZE);
       },
-#if defined(USE_LINUX_QUOTACTL)
+#  if defined(USE_LINUX_QUOTACTL)
       [](const struct dqblk& aQuotaInfo) {
         // dqb_bhardlimit is count of BLOCK_SIZE blocks
         return aQuotaInfo.dqb_bhardlimit * BLOCK_SIZE;
       },
-#endif
+#  endif
       aDiskCapacity);
+#else
+#  ifdef DEBUG
+  printf(
+      "ERROR: GetDiskCapacity: Not implemented for plaforms without "
+      "statfs.\n");
+#  endif
+  return NS_ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 NS_IMETHODIMP

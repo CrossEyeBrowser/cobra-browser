@@ -1,4 +1,3 @@
-/* vim:set ts=4 sw=2 sts=2 et cin: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -43,9 +42,9 @@ class ConnectionAttempt : public nsSupportsWeakReference {
   virtual void Abandon() = 0;
   virtual double Duration(TimeStamp epoch) = 0;
   bool AcceptsTransaction(nsHttpTransaction* trans) const;
-  virtual bool Claim() = 0;
+  virtual bool Claim(nsHttpTransaction* newTransaction = nullptr) = 0;
   void Unclaim();
-  virtual void CloseTransports(nsresult error) = 0;
+  virtual void OnTimeout() = 0;
   virtual void PrintDiagnostics(nsCString& log) = 0;
   virtual DnsAndConnectSocket* ToDnsAndConnectSocket() { return nullptr; }
   virtual uint32_t UnconnectedUDPConnsLength() const;

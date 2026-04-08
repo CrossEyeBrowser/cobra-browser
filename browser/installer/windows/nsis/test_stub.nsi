@@ -1,3 +1,6 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 Unicode true
 
 ; Tests use the silent install feature to bypass message box prompts.
@@ -119,8 +122,12 @@ Var MockLocalAppDataFolder
 !macroend
 !define GetLocalAppDataFolder "!insertmacro MockGetLocalAppDataFolder"
 
+!define GenerateUUID "Push 'THIS_IS_A_UNIQUE_ID_FOR_TESTING'"
+
 !include stub.nsh
 !include get_installation_type.nsh
+
+!include test_telemetry.nsh
 
 ; .onInit is responsible for running the tests
 Function .onInit
@@ -168,6 +175,8 @@ Function .onInit
     ${UnitTest} TestSetDlsourceFieldInPostSigningData
     ${UnitTest} TestUpdateInstalledPostSigningDataFileFailure
     ${UnitTest} TestUpdateInstalledPostSigningDataFileSuccess
+
+    Call TelemetryTests
 
     ${If} $TestFailureCount = 0
         ; On success, write the success metric and jump to the end

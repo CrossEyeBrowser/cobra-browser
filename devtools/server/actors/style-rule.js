@@ -738,7 +738,10 @@ class StyleRuleActor extends Actor {
           start: rawRule.start,
           end: rawRule.end,
         });
-      } else if (ruleClassName === "CSSStartingStyleRule") {
+      } else if (
+        ruleClassName === "CSSStartingStyleRule" ||
+        ruleClassName === "CSSAppearanceBaseRule"
+      ) {
         ancestorData.push({
           type,
         });
@@ -1431,7 +1434,8 @@ class StyleRuleActor extends Actor {
     }
 
     const containerEl = ancestorRule.rawRule.queryContainerFor(
-      nodeActor.rawNode
+      nodeActor.rawNode,
+      0
     );
 
     // queryContainerFor returns null when the container name wasn't find in any ancestor.
@@ -1474,7 +1478,7 @@ class StyleRuleActor extends Actor {
         decl.name
       );
 
-      if (!decl.inactiveCssData !== !inactiveCssData) {
+      if (decl.inactiveCssData?.msgId !== inactiveCssData?.msgId) {
         if (inactiveCssData) {
           decl.inactiveCssData = inactiveCssData;
         } else {

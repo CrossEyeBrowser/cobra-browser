@@ -1,4 +1,3 @@
-/* vim:set ts=4 sw=2 sts=2 et cin: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -53,7 +52,7 @@ class DnsAndConnectSocket final : public ConnectionAttempt,
   nsresult Init(ConnectionEntry* ent) override;
   void Abandon() override;
   double Duration(TimeStamp epoch) override;
-  void CloseTransports(nsresult error) override;
+  void OnTimeout() override;
 
   void PrintDiagnostics(nsCString& log) override;
 
@@ -61,7 +60,7 @@ class DnsAndConnectSocket final : public ConnectionAttempt,
   // half-open's connection.  If this half-open is marked as urgent-start,
   // it only accepts urgent start transactions.  Call only before Claim().
   bool AcceptsTransaction(nsHttpTransaction* trans);
-  bool Claim() override;
+  bool Claim(nsHttpTransaction* newTransaction = nullptr) override;
 
   DnsAndConnectSocket* ToDnsAndConnectSocket() override { return this; }
 

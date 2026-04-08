@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -7,6 +5,9 @@
 #include "ARIAMap.h"
 #include "CachedTableAccessible.h"
 #include "DocAccessibleParent.h"
+#ifdef MOZ_ENABLE_SKIA_PDF
+#  include "mozilla/a11y/PdfStructTreeBuilder.h"
+#endif
 #include "mozilla/a11y/Platform.h"
 #include "mozilla/Components.h"  // for mozilla::components
 #include "mozilla/dom/BrowserBridgeParent.h"
@@ -111,15 +112,28 @@ mozilla::ipc::IPCResult DocAccessibleParent::ProcessShowEvent(
     // required show events.
     if (!parent) {
       NS_ERROR("adding child to unknown accessible");
+#ifdef DEBUG
       return IPC_FAIL(this, "unknown parent accessible");
+#else
+      return IPC_OK();
+#endif
     }
+
+    if (parent->IsOuterDoc()) {
+      return IPC_FAIL(this, "Cannot attach non-doc to OuterDoc");
+    }
+
     lastParent = parent;
     lastParentID = accData.ParentID();
 
     uint32_t childIdx = accData.IndexInParent();
     if (childIdx > parent->ChildCount()) {
       NS_ERROR("invalid index to add child at");
+#ifdef DEBUG
       return IPC_FAIL(this, "invalid index");
+#else
+      return IPC_OK();
+#endif
     }
 
     RemoteAccessible* child = CreateAcc(accData);
@@ -137,7 +151,9 @@ mozilla::ipc::IPCResult DocAccessibleParent::ProcessShowEvent(
     // Otherwise, clients might crawl the incomplete subtree and they won't get
     // mutation events for the remaining pieces.
     if (aComplete || root != child) {
-      AttachChild(parent, childIdx, child);
+      if (!AttachChild(parent, childIdx, child)) {
+        return IPC_FAIL(this, "failed to attach child");
+      }
     }
   }
 
@@ -166,7 +182,9 @@ mozilla::ipc::IPCResult DocAccessibleParent::ProcessShowEvent(
     MOZ_ASSERT(rootParent);
     root = GetAccessible(mPendingShowChild);
     MOZ_ASSERT(root);
-    AttachChild(rootParent, mPendingShowIndex, root);
+    if (!AttachChild(rootParent, mPendingShowIndex, root)) {
+      return IPC_FAIL(this, "failed to attach pending show child");
+    }
     mPendingShowChild = 0;
     mPendingShowParent = 0;
     mPendingShowIndex = 0;
@@ -243,9 +261,20 @@ RemoteAccessible* DocAccessibleParent::CreateAcc(
   return newProxy;
 }
 
-void DocAccessibleParent::AttachChild(RemoteAccessible* aParent,
+bool DocAccessibleParent::AttachChild(RemoteAccessible* aParent,
                                       uint32_t aIndex,
                                       RemoteAccessible* aChild) {
+  if (aChild->RemoteParent()) {
+    MOZ_ASSERT_UNREACHABLE(
+        "Attempt to attach child which already has a parent!");
+    return false;
+  }
+
+  if (aParent == aChild) {
+    MOZ_ASSERT_UNREACHABLE("Attempt to make an accessible its own child!");
+    return false;
+  }
+
   aParent->AddChildAt(aIndex, aChild);
   aChild->SetParent(aParent);
   // ProxyCreated might have already been called if aChild is being moved.
@@ -274,6 +303,8 @@ void DocAccessibleParent::AttachChild(RemoteAccessible* aParent,
       return true;
     });
   }
+
+  return true;
 }
 
 void DocAccessibleParent::ShutdownOrPrepareForMove(RemoteAccessible* aAcc) {
@@ -286,6 +317,10 @@ void DocAccessibleParent::ShutdownOrPrepareForMove(RemoteAccessible* aAcc) {
     // the show event. For now, clear all of them by moving them to a temporary.
     auto children{std::move(aAcc->mChildren)};
     for (RemoteAccessible* child : children) {
+      if (child == aAcc) {
+        MOZ_ASSERT_UNREACHABLE(
+            "Somehow an accessible got added as a child of itself!");
+      }
       ShutdownOrPrepareForMove(child);
     }
   }
@@ -878,7 +913,6 @@ mozilla::ipc::IPCResult DocAccessibleParent::RecvBindChildDoc(
   MOZ_ASSERT(CheckDocTree());
 
   auto childDoc = static_cast<DocAccessibleParent*>(aChildDoc.get());
-  childDoc->Unbind();
   ipc::IPCResult result = AddChildDoc(childDoc, aID, false);
   MOZ_ASSERT(result);
   MOZ_ASSERT(CheckDocTree());
@@ -1384,6 +1418,15 @@ DocAccessibleParent::CollectReports(nsIHandleReportCallback* aHandleReport,
 }
 
 NS_IMPL_ISUPPORTS(DocAccessibleParent, nsIMemoryReporter);
+
+#ifdef MOZ_ENABLE_SKIA_PDF
+mozilla::ipc::IPCResult DocAccessibleParent::RecvPrinting() {
+  if (dom::CanonicalBrowsingContext* bc = GetBrowsingContext()) {
+    PdfStructTreeBuilder::Init(bc);
+  }
+  return IPC_OK();
+}
+#endif
 
 }  // namespace a11y
 }  // namespace mozilla

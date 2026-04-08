@@ -19,6 +19,8 @@
   <string name="content_description_menu">Повече настройки</string>
   <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
   <string name="content_description_private_browsing">Поверително разглеждане</string>
+  <!-- Content description (not visible, for screen readers etc.): "Normal Browsing" menu button. -->
+  <string name="content_description_normal_browsing">Нормално разглеждане</string>
   <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
   <string name="search_hint">Търсете или въведете адрес</string>
   <!-- Placeholder text shown in the search bar before a user enters text for a general engine -->
@@ -314,6 +316,8 @@
   <string name="browser_menu_edit_bookmark">Промяна на отметка</string>
   <!-- Browser menu label that the saves the currently visited page as a PDF -->
   <string name="browser_menu_save_as_pdf_2">Запазване като PDF</string>
+  <!-- Browser menu label for moving the current private tab to a non-private tab -->
+  <string name="browser_menu_move_to_non_private_tab">Преместване в не-поверителен раздел</string>
   <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
   <string name="browser_menu_translate_page_2">Превеждане на страницатa</string>
   <!-- Browser menu label for navigating to the summarization feature, which provides site summarization for the current visited page -->
@@ -372,6 +376,8 @@
     %2$s is the name of the language which the page was translated to. (For example: French)
   -->
   <string name="browser_toolbar_translated_successfully">Страницата е преведена от %1$s на %2$s.</string>
+  <!-- CFR description for the browser toolbar describing the "Shake to summarize feature" -->
+  <string name="browser_toolbar_summarize_cfr_description">Разклатете устройството, за да обобщите страницата за секунди. ⚡️</string>
   <!--
     Translation Toolbar
 
@@ -614,8 +620,12 @@
 
   <!-- "Continue" onboarding button. -->
   <string name="nova_onboarding_continue_button">Продължаване</string>
+  <!-- "Continue browsing" onboarding button. -->
+  <string name="nova_onboarding_continue_browsing_button" tools:ignore="UnusedResources">Продължете да разглеждате</string>
   <!-- "Not now" onboarding button. -->
   <string name="nova_onboarding_negative_button">Не сега</string>
+  <!-- "Skip" onboarding button. -->
+  <string name="nova_onboarding_skip_button" tools:ignore="UnusedResources">Пропускане</string>
   <!-- Terms of use (ToU) onboarding title. -->
   <string name="nova_onboarding_tou_title" tools:ignore="UnusedResources">Пригответе се за свобода</string>
   <!-- Terms of use (ToU) onboarding subtitle. -->
@@ -690,6 +700,25 @@
   <string name="nova_onboarding_add_search_widget_subtitle" tools:ignore="BrandUsage">Започвайте търсене от началния екран на телефона със знанието, че автоматичните защити на Firefox ви пазят.</string>
   <!-- "Add search widget" onboarding button. 'Firefox' is intentionally hardcoded. -->
   <string name="nova_onboarding_add_search_widget_button" tools:ignore="BrandUsage">Добавяне на джаджа за Firefox</string>
+  <!-- Customize prompt onboarding title. -->
+  <string name="nova_onboarding_customize_prompt_title" tools:ignore="UnusedResources">Лесен за персонализиране и по-поверителен с всяко докосване</string>
+  <plurals name="nova_onboarding_customize_prompt_body" tools:ignore="UnusedResources">
+    <!--
+      Customize prompt onboarding body.
+      %1$s is replaced by the product name (for example "Firefox"),
+      %2$,d is replaced by the number of trackers blocked. The comma represents the thousand
+      separator (e.g. 1,000 in English), and it will automatically use the correct character
+      for your locale (don't change or remove it).
+    -->
+    <item quantity="one">%1$s спряха %2$,d тракер, докато сте обикаляли в мрежата.</item>
+    <item quantity="other">%1$s спряха %2$,d проследявания, докато сте обикаляли в мрежата.</item>
+  </plurals>
+  <!-- Customize prompt onboarding positive button. -->
+  <string name="nova_onboarding_customize_prompt_positive_button" tools:ignore="UnusedResources">Започнете да персонализирате</string>
+  <!-- App icon onboarding title. -->
+  <string name="nova_onboarding_app_icon_prompt_title" tools:ignore="UnusedResources">Изберете персонализирана икона на приложение</string>
+  <!-- App icon onboarding body. -->
+  <string name="nova_onboarding_app_icon_prompt_body" tools:ignore="UnusedResources">Придайте индивидуалност на началния екран.</string>
   <!-- ==== End of Project "Nova" onboarding strings ==== -->
 
   <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
@@ -757,6 +786,10 @@
   <string name="preferences_category_about">Относно</string>
   <!-- Preference category for settings related to changing the default search engine -->
   <string name="preferences_category_select_default_search_engine">Изберете</string>
+  <!-- Preference category for settings related to changing the private browsing search engine -->
+  <string name="preferences_category_select_private_search_engine">Търсеща машина по подразбиране за частно сърфиране</string>
+  <!-- Option to set the private browsing mode to use the normal default search engine -->
+  <string name="search_engine_use_default">Използвайте същата търсачка като при нормално разглеждане</string>
   <!-- Preference for settings related to managing search shortcuts for the quick search menu -->
   <string name="preferences_manage_search_shortcuts_2">Управляване на алтернативни търсачки</string>
   <!-- Summary for preference for settings related to managing search shortcuts for the quick search menu -->
@@ -942,6 +975,8 @@
   <string name="preferences_show_nonsponsored_suggestions">Предложения от %1$s</string>
   <!-- Summary for preference to show Firefox Suggest search suggestions for web content -->
   <string name="preferences_show_nonsponsored_suggestions_summary">Получавайте предложения от мрежата, свързани с търсенето ви</string>
+  <!-- Preference title for switch preference to show search optimization cards -->
+  <string name="preferences_show_search_optimization_cards">Извличане на предложения от Mozilla, докато пишете</string>
   <!-- Preference for link sharing -->
   <string name="preferences_link_sharing">Споделяне на препратка</string>
   <!-- Title for the link sharing toggle. %1$s is replaced by the brand name (e.g. Firefox). -->
@@ -971,6 +1006,15 @@
   <string name="preference_downloads_folder_permission_lost" tools:ignore="UnusedResources">Нямате правo да използвате тази папка. Опитайте да изберете другa.</string>
   <!-- Preference title for choosing an app to handle downloads -->
   <string name="preferences_choose_app_for_downloads">Управляване на изтеглянията с друго приложение</string>
+  <!-- Preference category for deleting or removing downloads -->
+  <string name="preferences_category_delete_or_remove_downloads">Изтриване или премахване на изтеглените файлове</string>
+  <string name="preferences_downloads_delete_from_device">Изтриване от устройството</string>
+  <string name="preferences_downloads_delete_from_device_description">Файлът е изтрит от устройството и премахнат от историята на изтеглянията</string>
+  <string name="preferences_downloads_remove_from_download_history">Премахване от историята на изтеглянията</string>
+  <string name="preferences_downloads_remove_from_download_history_description">Файлът е премахнат от историята на изтеглянията, но все още е запазен на устройството ви</string>
+  <string name="preferences_downloads_ask_when_to_delete_files">Питай при изтриване на файлове</string>
+  <!-- Preference for downloads -->
+  <string name="preferences_downloads_2">Настройки за изтегляне</string>
   <!-- Title for the setting to automatically clean up downloaded files. %s is the name of the app (for example "Firefox"). -->
   <string name="preferences_downloads_settings_clean_up_files_title">Изтриване от %s и устройството</string>
   <!-- Summary for the setting to automatically clean up downloaded files -->
@@ -1032,8 +1076,10 @@
   <!--
     Customize Home
 
-    Header text for jumping back into the recent tab in customize the home screen
+    Title for the customize home screen section with privacy report.
   -->
+  <string name="customize_toggle_privacy_report">Доклад за поверителност</string>
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Върнете се към</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Отметки</string>
@@ -1499,12 +1545,8 @@
   <string name="studies_remove">Премахване</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Активни</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Изпробвайте функциите и идеите, преди да са достъпни за всички.</string>
   <!-- Description for studies. Note: The word "Firefox" should NOT be translated -->
   <string name="studies_description_4" tools:ignore="BrandUsage">Firefox произволно избира потребители, които да тестват функции, което подобрява качеството за всички.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Инсталиране и стартиране на проучвания</string>
   <!-- Title of the Studies data preference -->
   <string name="studies_title_2">Разрешаване на проучванията</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
@@ -1592,6 +1634,8 @@
   <string name="tab_manager_multiselect_menu_item_share">Споделяне</string>
   <!-- Text shown in the multiselect menu for adding selected tabs to collections. -->
   <string name="tab_manager_multiselect_menu_item_add_to_collection">Добавяне към списък</string>
+  <!-- Text shown in the multiselect menu for adding selected tabs to a tab group. -->
+  <string name="tab_manager_multiselect_menu_item_add_to_tab_group">Добавяне към група</string>
   <!-- Content description for tabs tray multiselect share button -->
   <string name="tab_tray_multiselect_share_content_description" tools:ignore="UnusedResources" moz:removedIn="149">Споделяне на избраните раздели</string>
   <!-- Content description for tabs tray multiselect menu -->
@@ -1638,12 +1682,43 @@
     Title for the create tab group bottom sheet
   -->
   <string name="create_tab_group_title">Създаване на група от раздели</string>
+  <!-- Title for the edit tab group bottom sheet -->
+  <string name="edit_tab_group_title">Редактиране на групата</string>
   <string name="create_tab_group_save_button">Запазване</string>
   <string name="edit_tab_group_bottom_sheet_close_content_description">Затваряне на група за редактиране</string>
   <!-- Default tab group name when creating a tab group -->
-  <string name="create_tab_group_default_name">Група</string>
-  <!-- Label for the tab group name field in the bottom sheet to create a new tab group. -->
+  <string name="create_tab_group_default_name" tools:ignore="UnusedResources" moz:removedIn="150">Група</string>
+  <!--
+    Default tab group name when creating a tab group
+    %d is the number of existing tab groups + 1.
+  -->
+  <string name="create_tab_group_form_default_name">Група %d</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
   <string name="create_tab_group_name_label">Име</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
+  <string name="tab_group_name_label" tools:ignore="UnusedResources" moz:removedIn="150">Име</string>
+  <!-- Title for adding more tabs to a tab group. -->
+  <string name="add_to_tab_group_title">Добавяне към</string>
+  <!-- Content Description for closing the "Add to Tab Group" panel. -->
+  <string name="add_to_tab_group_bottom_sheet_close_content_description">Затваряне на добавянето към групата раздели</string>
+  <!-- Label for adding to a new tab group. -->
+  <string name="add_to_new_tab_group_title">Нова група раздели</string>
+  <plurals name="tab_group_tabs_count_subtitle">
+    <!--
+      Subtitle for the number of tabs in a tab group.
+      %1$d is the number of tabs in a tab group.
+    -->
+    <item quantity="one">%1$d</item>
+    <item quantity="other">%1$d раздела</item>
+  </plurals>
+  <!-- Title for the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_title">Изтриване на група раздели?</string>
+  <!-- Text shown in the body of the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_body">Така групата ще бъде изтрита безвъзвратно.</string>
+  <!-- Text shown on the confirm button in the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_confirm">Премахване на групата</string>
+  <!-- Text shown on the cancel button in the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_cancel">Отказ</string>
   <!--
     History
 
@@ -1722,6 +1797,11 @@
     This button will dismiss the dialog.
   -->
   <string name="download_file_has_not_enough_storage_dialog_cancel_button_text">Отказ</string>
+  <plurals name="downloads_delete_dialog_title">
+    <!-- Title for the download deletion confirmation dialog. The message changes depending on how many files are selected. %d is the number of files to be deleted. -->
+    <item quantity="one">Изтриване на файл?</item>
+    <item quantity="other">Изтриване на %d файла?</item>
+  </plurals>
   <!-- Text for the button to delete a single downloaded file item -->
   <string name="download_delete_item">Изтриване</string>
   <!-- Content description for the toolbar "Navigate back" button -->
@@ -1753,6 +1833,14 @@
   <string name="download_delete_multi_select_dialog_confirm">Изтриване</string>
   <!-- Alert dialog confirmation before deleting multiple download items, this is the negative action. -->
   <string name="download_delete_multi_select_dialog_cancel">Отказ</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is one of the radio buttons within the dialog box for the user to select. -->
+  <string name="download_delete_dialog_from_device">Изтриване от устройството</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is one of the radio buttons within the dialog box for the user to select. -->
+  <string name="download_delete_dialog_from_history">Премахване само от историята на изтеглянията</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is the negative action. -->
+  <string name="download_delete_dialog_cancel">Отказ</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is the positive action. -->
+  <string name="download_delete_dialog_confirm">Потвърждение</string>
   <!-- Title for the alert dialog confirmation before renaming a download item. -->
   <string name="download_rename_dialog_title">Преименуване на файл</string>
   <!-- Label for the name field in the alert dialog confirmation before renaming a download item. -->
@@ -1850,6 +1938,16 @@
   <string name="download_content_type_filter_document">Документи</string>
   <!-- Text for the filter button to show all other file types in the downloads list -->
   <string name="download_content_type_filter_other_1">Друго</string>
+  <!--
+    Title for the alert dialog to rename a file and/or change its download location before downloading it.
+    %s is the formatted size of the file (e.g., "12.5 MB").
+  -->
+  <string name="download_rename_and_change_location_dialog_title">Изтегляне на файла? (%s)</string>
+  <!--
+    Title for the alert dialog to rename a file and/or change its download location
+    when the file size is not available before downloading it.
+  -->
+  <string name="download_rename_and_change_location_dialog_title_with_unknown_size">Изтегляне на файла?</string>
   <!--
     WebCompat Reporter
 
@@ -1978,7 +2076,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Редактиране</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Копиране</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Копиране</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Споделяне</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -2034,12 +2132,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">Изтрита %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">ОТМЕНЯНЕ</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">ОТМЕНЯНЕ</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">Отметката %s е премахната</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">Отметката %s е премахната</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Изтрити елементи: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Изтрити елементи: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Връщане назад</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Добавяне на нова папка</string>
@@ -2248,6 +2350,24 @@
   <string name="menu_print">Отпечатване</string>
   <!-- Sub-header in the dialog to share a link to another sync device -->
   <string name="share_device_subheader">Изпращане към устройство</string>
+  <!-- Content description for the drag handle that dismisses the Send to Device bottom sheet -->
+  <string name="send_to_devices_bottom_sheet_close_content_description">Затворете „Изпращане към устройство“.</string>
+  <!-- Text for the QR code action in the native share sheet -->
+  <string name="share_qr_code">QR код</string>
+  <!-- Title shown in the QR code display screen -->
+  <string name="qr_code_display_title">QR код</string>
+  <!-- Content description for the close button in the QR code display screen -->
+  <string name="qr_code_display_close">Затваряне</string>
+  <!-- Heading on the QR code display screen -->
+  <string name="qr_code_display_share_nearby">Споделяне на връзка наблизо</string>
+  <!-- Body text on the QR code display screen instructing the user to have others scan the code -->
+  <string name="qr_code_display_instructions">За да споделите тази връзка с хора наоколо, нека сканират кода за бърза реакция по-долу.</string>
+  <!-- Label for the download button on the QR code display screen -->
+  <string name="qr_code_display_download">Изтегляне</string>
+  <!-- Toast shown when the QR code is successfully saved to Downloads -->
+  <string name="qr_code_download_success">QR кодът е запазен в Изтегляния</string>
+  <!-- Toast shown when saving the QR code to Downloads fails -->
+  <string name="qr_code_download_failure">Неуспешно запазване на QR кода</string>
   <!-- Sub-header in the dialog to share a link to an app from the full list -->
   <string name="share_link_all_apps_subheader">Всички действия</string>
   <!-- Sub-header in the dialog to share a link to an app from the most-recent sorted list -->
@@ -2308,23 +2428,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Направете Firefox вашия четец по подразбиране</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Пробвайте поверително разглеждане</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Пробвайте поверително разглеждане</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Разглеждайте без запазени бисквитки или история в %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Разглеждайте без запазени бисквитки или история в %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Преглеждайте без следа</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Преглеждайте без следа</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">Поверителното разглеждане в %1$s не пази информация.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">Поверителното разглеждане в %1$s не пази информация.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Направете първото си търсене</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Направете първото си търсене</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Намерете нещо наоколо. Или отрийте нещо забавно.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Намерете нещо наоколо. Или отрийте нещо забавно.</string>
   <!--
     Survey
 
@@ -2377,8 +2497,6 @@
   <string name="preference_accessibility_text_size_summary">Направи текста в уебсайтовете по-голям или по-малък</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Размер на шрифт</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Автоматичен размер на шрифта</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2500,6 +2618,17 @@
   <string name="preference_enhanced_tracking_protection_explanation_2">%s ви предпазва от много от най-разпространените проследявания, които следят какво правите онлайн.</string>
   <!-- Text displayed that links to website about enhanced tracking protection -->
   <string name="preference_enhanced_tracking_protection_explanation_learn_more">Научете повече</string>
+  <plurals name="trackers_blocked_count">
+    <!--
+      Trackers blocked card on homepage
+
+      Text shown on the trackers blocked card. %d is the number of trackers blocked.
+    -->
+    <item quantity="one">%d Тракерът е спрян</item>
+    <item quantity="other">%d блокирани проследявания</item>
+  </plurals>
+  <!-- Text shown on the trackers blocked card when no trackers have been blocked yet -->
+  <string name="trackers_blocked_empty">Вие сте защитени</string>
   <!-- Preference for enhanced tracking protection for the standard protection settings -->
   <string name="preference_enhanced_tracking_protection_standard_default_1">Стандартна (подразбиране)</string>
   <!-- Preference description for enhanced tracking protection for the standard protection settings -->
@@ -3310,6 +3439,8 @@
     Header text for a section on the home screen.
   -->
   <string name="pocket_stories_header_2">Истории</string>
+  <!-- Header text for the Stories screen. -->
+  <string name="stories_screen_text_news">Новини</string>
   <!--
     Context description text for the "Discover more" button in the stories home screen section
     which navigates the user to a screen displaying more stories.
@@ -3402,7 +3533,9 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">Езиците не можаха да бъдат заредени. Проверете връзката си с интернет и опитайте отново.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">За съжаление, все още не поддържаме %1$s.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">За съжаление, все още не поддържаме %1$s.</string>
+  <!-- The title of the warning card informs the user that translations from a language are not supported yet. %1$s is the name of the source language. -->
+  <string name="translation_error_language_not_supported_warning_text_2">За съжаление, все още не се поддържат преводи от %1$s.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">Превеждане…</string>
   <!--
@@ -3726,6 +3859,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Добавяне към поверителните раздели</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 
@@ -3764,6 +3899,16 @@
   <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">Не използвам търсене във Firefox</string>
   <!-- Option for likert scale -->
   <string name="likert_scale_option_8" tools:ignore="UnusedResources">Не използвам синхронизация</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_slow_or_buggy" tools:ignore="UnusedResources">Бавно е или е с дефекти</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_features_hard_to_find_or_missing" tools:ignore="UnusedResources">Функциите са трудни за намиране или липсват</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_confusing_or_hard_to_use" tools:ignore="UnusedResources">Объркващо е или е трудно за използване</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_its_okay" tools:ignore="UnusedResources">Добре е, но не е по-добър от другите браузъри</string>
+  <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+  <string name="likert_scale_option_i_plan_to_keep_using" tools:ignore="BrandUsage,UnusedResources">Смятам да продължа да използвам Firefox</string>
   <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">Помогнете за подобряването на отпечатването във Firefox. Отнема само секунда</string>
   <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
@@ -3778,6 +3923,8 @@
   <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Доколко сте доволни от търсенето с Firefox?</string>
   <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">Доколко сте доволни от синхронизирането във Firefox?</string>
+  <!-- Text shown in the survey title for 'describe your experience so far' microsurvey. Note: The word "Firefox" should NOT be translated. -->
+  <string name="microsurvey_describe_your_experience_title" tools:ignore="BrandUsage,UnusedResources">Помогнете ни да подобрим Firefox. Кое описва най-добре преживяването ви досега?</string>
   <!--
     Accessibility
 

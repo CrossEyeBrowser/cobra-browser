@@ -262,7 +262,7 @@ libtapi:
     fetch:
         type: git
         repo: https://github.com/tpoechtrager/apple-libtapi
-        revision: aed9334283e3e290bba622ee980bde2322e4d516
+        revision: 593d29141bf176d24021208c75af54a2ef23c38b
 
 libdispatch:
     description: libdispatch source code
@@ -352,7 +352,7 @@ mingw-w64:
     fetch:
         type: git
         repo: https://git.code.sf.net/p/mingw-w64/mingw-w64
-        revision: 43f2643cbde20aff1c4b89a98c78d0b4b0fe90c2
+        revision: 9b3dd0125792fe94d16cacdc596dbd42fca1b369
 
 mingw-w64-trunk:
     description: mingw-w64 master branch source code
@@ -493,7 +493,7 @@ dump-syms:
     fetch:
         type: git
         repo: https://github.com/mozilla/dump_syms/
-        revision: 5ba29a30c1c25eb5c6aa21890b390e3d51db6b4a
+        revision: 01b3559d5b3692e731d768d94e2eef42984c737b
 
 rust-minidump:
     description: rust-minidump 0.25.0 source code (for minidump-stackwalk)
@@ -667,7 +667,7 @@ msix-packaging:
     fetch:
         type: git
         repo: https://github.com/mozilla/msix-packaging
-        revision: 8164b7ac5a67688e18fa2497fb31ba13ce9bfb15
+        revision: 1d068315fc1cff43c04837816c28a4a66cba22c1
 
 pkgconf:
     description: pkgconf 2.5.1
@@ -685,7 +685,7 @@ afl-plus-plus-4.0:
     fetch:
         type: git
         repo: https://github.com/AFLplusplus/AFLplusplus
-        revision: ada0855022ac6e77de74622d0ab61ca7a37b9a9c
+        revision: e5a8ba39ecf97d05e286fdd4e01da96554dbf64f
 
 cargo-vet:
     description: cargo-vet source
@@ -803,18 +803,18 @@ dxc-src:
         revision: dc9cb8960f8d4fbb5f904eac1e3bf7f1821e4be1
 
 jj:
-    description: jj 0.29.0 source code
+    description: jj 0.38.0 source code
     fetch:
         type: git
         repo: https://github.com/jj-vcs/jj
-        revision: 94269d2e7228ff502b2116258e5ae6b3b07ec434
+        revision: 2508982cde5c7e4db0933e0b6469f9e778e71e28
 
 firefox-profiler:
     description: firefox profiler source code
     fetch:
         type: git
         repo: https://github.com/firefox-devtools/profiler
-        branch: production
+        revision: f37398ff0376cbab4d3d58faa3a00a04bee5f737
 
 # See https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/downloads
 windowsappsdk-redist:

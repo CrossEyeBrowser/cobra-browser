@@ -1607,13 +1607,11 @@ impl BatchBuilder {
                 let prim_data = &ctx.data_stores.linear_grad[data_handle];
                 Some((prim_data.src_color, Some(visible_tiles_range), prim_data.brush_segments.as_slice()))
             }
-            PrimitiveInstanceKind::RadialGradient { data_handle, ref visible_tiles_range, .. } => {
-                let prim_data = &ctx.data_stores.radial_grad[data_handle];
-                Some((prim_data.src_color, Some(visible_tiles_range), prim_data.brush_segments.as_slice()))
+            PrimitiveInstanceKind::RadialGradient { .. } => {
+                unreachable!("BUG: radial gradients should always use quad path");
             }
-            PrimitiveInstanceKind::ConicGradient { data_handle, ref visible_tiles_range, .. } => {
-                let prim_data = &ctx.data_stores.conic_grad[data_handle];
-                Some((prim_data.src_color, Some(visible_tiles_range), prim_data.brush_segments.as_slice()))
+            PrimitiveInstanceKind::ConicGradient { .. } => {
+                unreachable!("BUG: conic gradients should always use quad path");
             }
             PrimitiveInstanceKind::ImageBorder { data_handle, .. } => {
                 let prim_data = &ctx.data_stores.image_border[data_handle];
@@ -1813,7 +1811,7 @@ impl BatchBuilder {
                 let glyph_keys = &ctx.scratch.glyph_keys[run.glyph_keys_range];
                 let prim_header = PrimitiveHeader {
                     local_rect: LayoutRect {
-                        min: prim_rect.min - run.reference_frame_relative_offset,
+                        min: prim_rect.min,
                         max: run.snapped_reference_frame_relative_offset.to_point(),
                     },
                     specific_prim_address: prim_cache_address.as_int(),
@@ -2077,8 +2075,7 @@ impl BatchBuilder {
                     specific_resource_address,
                 );
             }
-            PrimitiveInstanceKind::Rectangle { use_legacy_path, .. } => {
-                debug_assert!(use_legacy_path);
+            PrimitiveInstanceKind::Rectangle { .. } => {
                 let batch_params = BrushBatchParameters::shared(
                     BrushBatchKind::Solid,
                     TextureSet::UNTEXTURED,
@@ -3103,7 +3100,7 @@ impl ClipBatcher {
             let clip_node = &ctx.data_stores.clip[clip_instance.handle];
 
             let clip_transform_id = transforms.gpu.get_id(
-                clip_node.item.spatial_node_index,
+                clip_instance.spatial_node_index,
                 ctx.root_spatial_node_index,
                 ctx.spatial_tree,
             );
@@ -3128,6 +3125,7 @@ impl ClipBatcher {
                     unreachable!();
                 }
                 ClipItemKind::BoxShadow { ref source }  => {
+                    // Only reachable when use_quad_box_shadow is not set.
                     let task_id = source
                         .render_task
                         .expect("bug: render task handle not allocated");
@@ -3151,7 +3149,8 @@ impl ClipBatcher {
 
                     true
                 }
-                ClipItemKind::Rectangle { rect, mode: ClipMode::ClipOut } => {
+                ClipItemKind::Rectangle { size, mode: ClipMode::ClipOut } => {
+                    let rect = LayoutRect::from_origin_and_size(clip_instance.clip_rect_origin, size);
                     self.get_batch_list(is_first_clip)
                         .slow_rectangles
                         .push(ClipMaskInstanceRect {
@@ -3162,14 +3161,15 @@ impl ClipBatcher {
 
                     true
                 }
-                ClipItemKind::Rectangle { rect, mode: ClipMode::Clip } => {
+                ClipItemKind::Rectangle { size, mode: ClipMode::Clip } => {
+                    let rect = LayoutRect::from_origin_and_size(clip_instance.clip_rect_origin, size);
                     if clip_instance.flags.contains(ClipNodeFlags::SAME_COORD_SYSTEM) {
                         false
                     } else {
                         if self.add_tiled_clip_mask(
                             actual_rect,
                             rect,
-                            clip_node.item.spatial_node_index,
+                            clip_instance.spatial_node_index,
                             ctx.spatial_tree,
                             &ctx.screen_world_rect,
                             ctx.global_device_pixel_scale,
@@ -3190,7 +3190,8 @@ impl ClipBatcher {
                         true
                     }
                 }
-                ClipItemKind::RoundedRectangle { rect, ref radius, mode, .. } => {
+                ClipItemKind::RoundedRectangle { size, ref radius, mode, .. } => {
+                    let rect = LayoutRect::from_origin_and_size(clip_instance.clip_rect_origin, size);
                     let batch_list = self.get_batch_list(is_first_clip);
                     let instance = ClipMaskInstanceRect {
                         common,

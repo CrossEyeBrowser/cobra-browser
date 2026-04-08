@@ -23,13 +23,11 @@ document.addEventListener(
           TabContextMenu.moveTabsToNewGroup();
           break;
         case "context_ungroupTab":
-          TabContextMenu.ungroupTabs();
+        case "context_ungroupSplitView":
+          TabContextMenu.ungroupTabsAndSplitViews();
           break;
         case "context_moveSplitViewToNewGroup":
           TabContextMenu.moveSplitViewToNewGroup();
-          break;
-        case "context_ungroupSplitView":
-          TabContextMenu.ungroupSplitViews();
           break;
         case "context_moveTabToSplitView":
           TabContextMenu.moveTabsToSplitView();
@@ -444,6 +442,12 @@ document.addEventListener(
     containerHistoryPopup.addEventListener("popupshowing", event =>
       PlacesUIUtils.createContainerTabMenu(event)
     );
+
+    document
+      .getElementById("sidebar-bookmarks-context-container-tab-popup")
+      .addEventListener("popupshowing", event =>
+        PlacesUIUtils.createContainerTabMenu(event)
+      );
 
     document
       .getElementById("context_reopenInContainerPopupMenu")

@@ -5,21 +5,26 @@
 .focus-timer {
   @include newtab-card-style;
 
-  grid-column: span 1;
-  width: var(--newtab-card-grid-layout-width);
-
-  // Match the new card width if sections are enabled
-  .has-sections-grid & {
-    width: var(--newtab-card-width-medium);
-  }
-
   border-radius: var(--border-radius-large);
   padding-block: var(--space-medium);
-  height: var(--newtab-card-height);
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: var(--box-shadow-card);
+  // @backward-compat { version 150 } D281466/D283723 renamed design tokens; remove once Firefox 150 is on Release.
+  box-shadow: var(--card-box-shadow, var(--box-shadow-card));
+
+  // Classic layout (when Nova is disabled)
+  // @nova-cleanup(remove-conditional): Remove classic fixed-width/height styles after Nova ships
+  .classic-enabled & {
+    grid-column: span 1;
+    width: var(--newtab-card-grid-layout-width);
+    height: var(--newtab-card-height);
+
+    // Match the new card width if sections are enabled
+    .has-sections-grid & {
+      width: var(--newtab-card-width-medium);
+    }
+  }
 }
 
 .focus-timer-tabs {
@@ -65,10 +70,10 @@
   padding-inline: var(--space-medium);
   margin-block-end: var(--space-medium);
 
-  h3 {
-    font-size: var(--button-font-size);
-    font-weight: var(--heading-font-weight);
+  h2 {
     margin-block: 0;
+    font-weight: var(--font-weight);
+    font-size: var(--font-size-root);
   }
 }
 

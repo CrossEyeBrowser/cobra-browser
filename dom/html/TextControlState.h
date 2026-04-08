@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -205,7 +203,7 @@ class TextControlState final : public SupportsWeakPtr {
   void Traverse(nsCycleCollectionTraversalCallback& cb);
   MOZ_CAN_RUN_SCRIPT_BOUNDARY void Unlink();
 
-  bool IsBusy() const { return !!mHandlingState || mValueTransferInProgress; }
+  bool IsBusy() const { return !!mHandlingState; }
 
   MOZ_CAN_RUN_SCRIPT TextEditor* GetTextEditor();
   TextEditor* GetExtantTextEditor() const;
@@ -213,8 +211,9 @@ class TextControlState final : public SupportsWeakPtr {
   nsFrameSelection* GetIndependentFrameSelection() const;
   nsresult InitializeSelection(PresShell*);
   MOZ_CAN_RUN_SCRIPT void DeinitSelection();
-  MOZ_CAN_RUN_SCRIPT nsresult PrepareEditor(const nsAString* aValue = nullptr);
+  MOZ_CAN_RUN_SCRIPT nsresult PrepareEditor();
   void InitializeKeyboardEventListeners();
+  MOZ_CAN_RUN_SCRIPT void UpdateEditorOnTypeChange();
 
   /**
    * OnEditActionHandled() is called when mTextEditor handles something
@@ -530,9 +529,7 @@ class TextControlState final : public SupportsWeakPtr {
 
   bool mEverInited : 1;  // Have we ever been initialized?
   bool mEditorInitialized : 1;
-  bool mValueTransferInProgress : 1;  // Whether a value is being transferred to
-                                      // the frame
-  bool mSelectionCached : 1;          // Whether mSelectionProperties is valid
+  bool mSelectionCached : 1;  // Whether mSelectionProperties is valid
 
   friend class AutoTextControlHandlingState;
   friend class PrepareEditorEvent;

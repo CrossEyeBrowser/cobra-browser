@@ -60,8 +60,6 @@ export default class BandwidthUsageCustomElement extends MozLitElement {
     if (this.remainingGB < 1) {
       // Bug 2006997 - Handle this scenario where less than 1 GB used.
       return Math.floor(this.remainingMB);
-    } else if (this.bandwidthUsedGB < 1) {
-      return Math.floor(this.remainingGB);
     }
 
     if (this.bandwidthPercent === 75) {
@@ -119,7 +117,7 @@ export default class BandwidthUsageCustomElement extends MozLitElement {
       <div class="container">
         <h3
           id="bandwidth-header"
-          data-l10n-id="ip-protection-bandwidth-header"
+          data-l10n-id="ip-protection-bandwidth-header-1"
         ></h3>
         <div>
           <span
@@ -132,14 +130,14 @@ export default class BandwidthUsageCustomElement extends MozLitElement {
           <a
             is="moz-support-link"
             part="support-link"
-            support-page=${LINKS.SUPPORT_URL}
+            support-page=${LINKS.SUPPORT_SLUG}
           ></a>
         </div>
         <div id="progress-container">
           <progress
             id="progress-bar"
             max=${this.maxGB}
-            value=${this.maxGB - this.remainingGB}
+            value=${parseFloat(this.bandwidthUsedGB.toFixed(1))}
             percent=${this.bandwidthPercent}
           ></progress>
           <div id="min-progress"></div>

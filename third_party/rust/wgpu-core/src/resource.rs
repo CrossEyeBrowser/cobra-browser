@@ -324,10 +324,10 @@ pub enum BufferAccessError {
 
 impl WebGpuError for BufferAccessError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::InvalidResource(e) => e,
-            Self::DestroyedResource(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::InvalidResource(e) => e.webgpu_error_type(),
+            Self::DestroyedResource(e) => e.webgpu_error_type(),
 
             Self::Failed
             | Self::AlreadyMapped
@@ -342,9 +342,8 @@ impl WebGpuError for BufferAccessError {
             | Self::OutOfBoundsEndOffsetOverrun { .. }
             | Self::MapAborted
             | Self::MapStartOffsetOverrun { .. }
-            | Self::MapEndOffsetOverrun { .. } => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            | Self::MapEndOffsetOverrun { .. } => ErrorType::Validation,
+        }
     }
 }
 
@@ -1027,19 +1026,18 @@ crate::impl_trackable!(Buffer);
 
 impl WebGpuError for CreateBufferError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::AccessError(e) => e,
-            Self::MissingDownlevelFlags(e) => e,
-            Self::IndirectValidationBindGroup(e) => e,
-            Self::MissingFeatures(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::AccessError(e) => e.webgpu_error_type(),
+            Self::MissingDownlevelFlags(e) => e.webgpu_error_type(),
+            Self::IndirectValidationBindGroup(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(e) => e.webgpu_error_type(),
 
             Self::UnalignedSize
             | Self::InvalidUsage(_)
             | Self::UsageMismatch(_)
-            | Self::MaxBufferSize { .. } => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            | Self::MaxBufferSize { .. } => ErrorType::Validation,
+        }
     }
 }
 
@@ -1659,12 +1657,12 @@ impl Borrow<TextureSelector> for Texture {
 
 impl WebGpuError for CreateTextureError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::CreateTextureView(e) => e,
-            Self::InvalidDimension(e) => e,
-            Self::MissingFeatures(_, e) => e,
-            Self::MissingDownlevelFlags(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::CreateTextureView(e) => e.webgpu_error_type(),
+            Self::InvalidDimension(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(_, e) => e.webgpu_error_type(),
+            Self::MissingDownlevelFlags(e) => e.webgpu_error_type(),
 
             Self::InvalidUsage(_)
             | Self::IncompatibleUsage(_, _)
@@ -1677,9 +1675,8 @@ impl WebGpuError for CreateTextureError {
             | Self::InvalidMultisampledStorageBinding
             | Self::InvalidMultisampledFormat(_)
             | Self::InvalidSampleCount(..)
-            | Self::MultisampledNotRenderAttachment => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            | Self::MultisampledNotRenderAttachment => ErrorType::Validation,
+        }
     }
 }
 
@@ -1841,9 +1838,8 @@ pub enum CreateTextureViewError {
     #[error("Array layer count is 0")]
     ZeroArrayLayerCount,
     #[error(
-        "TextureView spans mip levels [{base_mip_level}, {end_mip_level}) \
-        (mipLevelCount {mip_level_count}) but the texture view only has {total} total mip levels",
-        end_mip_level = base_mip_level + mip_level_count
+        "`TextureView` starts at mip level {base_mip_level} and spans {mip_level_count} mip \
+        levels, but the texture view only has {total} total mip level(s)"
     )]
     TooManyMipLevels {
         base_mip_level: u32,
@@ -1851,9 +1847,8 @@ pub enum CreateTextureViewError {
         total: u32,
     },
     #[error(
-        "TextureView spans array layers [{base_array_layer}, {end_array_layer}) \
-         (arrayLayerCount {array_layer_count}) but the texture view only has {total} total layers",
-        end_array_layer = base_array_layer + array_layer_count
+        "`TextureView` starts at array layer {base_array_layer} and spans {array_layer_count}) \
+        array layers, but the texture view only has {total} total layer(s)"
     )]
     TooManyArrayLayers {
         base_array_layer: u32,
@@ -1912,10 +1907,6 @@ impl WebGpuError for CreateTextureViewError {
         }
     }
 }
-
-#[derive(Clone, Debug, Error)]
-#[non_exhaustive]
-pub enum TextureViewDestroyError {}
 
 crate::impl_resource_type!(TextureView);
 crate::impl_labeled!(TextureView);
@@ -1991,22 +1982,19 @@ pub enum CreateExternalTextureError {
 
 impl WebGpuError for CreateExternalTextureError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            CreateExternalTextureError::Device(e) => e,
-            CreateExternalTextureError::MissingFeatures(e) => e,
-            CreateExternalTextureError::InvalidResource(e) => e,
-            CreateExternalTextureError::CreateBuffer(e) => e,
-            CreateExternalTextureError::QueueWrite(e) => e,
-            CreateExternalTextureError::MissingTextureUsage(e) => e,
+        match self {
+            CreateExternalTextureError::Device(e) => e.webgpu_error_type(),
+            CreateExternalTextureError::MissingFeatures(e) => e.webgpu_error_type(),
+            CreateExternalTextureError::InvalidResource(e) => e.webgpu_error_type(),
+            CreateExternalTextureError::CreateBuffer(e) => e.webgpu_error_type(),
+            CreateExternalTextureError::QueueWrite(e) => e.webgpu_error_type(),
+            CreateExternalTextureError::MissingTextureUsage(e) => e.webgpu_error_type(),
             CreateExternalTextureError::IncorrectPlaneCount { .. }
             | CreateExternalTextureError::InvalidPlaneMultisample(_)
             | CreateExternalTextureError::InvalidPlaneSampleType { .. }
             | CreateExternalTextureError::InvalidPlaneDimension(_)
-            | CreateExternalTextureError::InvalidPlaneFormat { .. } => {
-                return ErrorType::Validation
-            }
-        };
-        e.webgpu_error_type()
+            | CreateExternalTextureError::InvalidPlaneFormat { .. } => ErrorType::Validation,
+        }
     }
 }
 
@@ -2130,17 +2118,16 @@ crate::impl_trackable!(Sampler);
 
 impl WebGpuError for CreateSamplerError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::MissingFeatures(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(e) => e.webgpu_error_type(),
 
             Self::InvalidLodMinClamp(_)
             | Self::InvalidLodMaxClamp { .. }
             | Self::InvalidAnisotropy(_)
             | Self::InvalidFilterModeWithAnisotropy { .. }
-            | Self::InvalidMipmapFilterModeWithAnisotropy { .. } => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            | Self::InvalidMipmapFilterModeWithAnisotropy { .. } => ErrorType::Validation,
+        }
     }
 }
 
@@ -2159,13 +2146,12 @@ pub enum CreateQuerySetError {
 
 impl WebGpuError for CreateQuerySetError {
     fn webgpu_error_type(&self) -> ErrorType {
-        let e: &dyn WebGpuError = match self {
-            Self::Device(e) => e,
-            Self::MissingFeatures(e) => e,
+        match self {
+            Self::Device(e) => e.webgpu_error_type(),
+            Self::MissingFeatures(e) => e.webgpu_error_type(),
 
-            Self::TooManyQueries { .. } | Self::ZeroCount => return ErrorType::Validation,
-        };
-        e.webgpu_error_type()
+            Self::TooManyQueries { .. } | Self::ZeroCount => ErrorType::Validation,
+        }
     }
 }
 
@@ -2365,9 +2351,7 @@ impl Blas {
                 match map_res {
                     Ok(mapping) => {
                         if !mapping.is_coherent {
-                            // Clippy complains about this because it might not be intended, but
-                            // this is intentional.
-                            #[expect(clippy::single_range_in_vec_init)]
+                            #[expect(clippy::single_range_in_vec_init, reason = "intentional")]
                             self.device.raw().invalidate_mapped_ranges(
                                 compaction_buffer,
                                 &[0..size_of::<wgpu_types::BufferAddress>() as wgt::BufferAddress],

@@ -43,6 +43,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PrefsFeed: "resource://newtab/lib/PrefsFeed.sys.mjs",
   PlacesFeed: "resource://newtab/lib/PlacesFeed.sys.mjs",
   Region: "resource://gre/modules/Region.sys.mjs",
+  RemoteRenderer: "resource://newtab/lib/RemoteRenderer.sys.mjs",
   SectionsFeed: "resource://newtab/lib/SectionsManager.sys.mjs",
   SectionsLayoutFeed: "resource://newtab/lib/SectionsLayoutFeed.sys.mjs",
   StartupCacheInit: "resource://newtab/lib/StartupCacheInit.sys.mjs",
@@ -116,6 +117,9 @@ const PREF_IMAGE_PROXY_ENABLED =
   "browser.newtabpage.activity-stream.discoverystream.imageProxy.enabled";
 
 const PREF_IMAGE_PROXY_ENABLED_STORE = "discoverystream.imageProxy.enabled";
+
+const PREF_NEWTAB_REMOTE_RENDERER_ENABLED =
+  "browser.newtabpage.activity-stream.remote-renderer.enabled";
 
 export const PREF_DEFAULT_VALUE_TOPSITES_ENABLED = true;
 export const PREF_DEFAULT_VALUE_TOPSTORIES_ENABLED = true;
@@ -512,6 +516,13 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Number of rows of Top Sites to display",
       value: 1,
+    },
+  ],
+  [
+    "topSitesMaxSitesPerRow",
+    {
+      title: "Max number of Top Sites to display per row",
+      value: 8,
     },
   ],
   [
@@ -994,6 +1005,14 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "newtabWallpapers.initialWallpaper",
+    {
+      title:
+        "Initial wallpaper set by a Nimbus experiment. Persists after experiment ends.",
+      value: "",
+    },
+  ],
+  [
     "sov.enabled",
     {
       title: "Enables share of voice (SOV)",
@@ -1041,7 +1060,7 @@ export const PREFS_CONFIG = new Map([
     "widgets.enabled",
     {
       title: "Allows users to toggle all widgets on and off at once",
-      value: false,
+      value: true,
     },
   ],
   [
@@ -1098,8 +1117,9 @@ export const PREFS_CONFIG = new Map([
   [
     "widgets.maximized",
     {
-      title: "Toggles maximized state for all widgets in the widgets section",
-      value: false,
+      title:
+        "Toggles maximized state for all widgets in the widgets section. It defaults to true as the default widget size is large",
+      value: true,
     },
   ],
   [
@@ -1158,6 +1178,27 @@ export const PREFS_CONFIG = new Map([
       title:
         "Boolean flag for determining if a user has interacted with the weather forecast widget",
       value: false,
+    },
+  ],
+  [
+    "widgets.weather.size",
+    {
+      title: "Size of the weather forecast widget (small, medium, or large)",
+      value: "large",
+    },
+  ],
+  [
+    "widgets.lists.size",
+    {
+      title: "Size of the lists widget (medium or large)",
+      value: "large",
+    },
+  ],
+  [
+    "widgets.focusTimer.size",
+    {
+      title: "Size of the focus timer widget (medium or large)",
+      value: "large",
     },
   ],
   [
@@ -1478,10 +1519,25 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "nova.enabled",
+    {
+      title: "Boolean flag to enable Nova",
+      value: false,
+    },
+  ],
+  [
     "selfLoading.enabled",
     {
       title:
         "Communicates to AboutNewTabChild whether or not it should load the classic scripts or do nothing.",
+      value: true,
+    },
+  ],
+  [
+    "remote-renderer.enabled",
+    {
+      title:
+        "Set to true to enable the RemoteSettings backed renderer for newtab. See RemoteRenderer.sys.mjs for more details.",
       value: false,
     },
   ],
@@ -1709,6 +1765,12 @@ export class ActivityStream {
     this._defaultPrefs = new lazy.DefaultPrefs(PREFS_CONFIG);
     this._proxyRegistered = false;
     this.#createdInstant = createdInstant ?? null;
+
+    if (
+      Services.prefs.getBoolPref(PREF_NEWTAB_REMOTE_RENDERER_ENABLED, false)
+    ) {
+      this.remoteRenderer = new lazy.RemoteRenderer();
+    }
   }
 
   /**
@@ -1921,6 +1983,7 @@ export class ActivityStream {
 
     this.store.uninit();
     this.unregisterNetworkProxy();
+    lazy.NewTabActorRegistry.uninit();
     this.initialized = false;
   }
 

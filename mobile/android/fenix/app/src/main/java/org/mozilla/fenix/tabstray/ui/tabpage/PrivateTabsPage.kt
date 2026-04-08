@@ -82,6 +82,7 @@ internal fun PrivateTabsPage(
                     // Because we don't currently support selection mode for private tabs,
                     // there's no need to exit selection mode when dragging tabs.
                 },
+                onDeleteTabGroup = {},
                 onMove = onMove,
             )
         }
@@ -105,7 +106,7 @@ private fun EmptyPrivateTabsPage(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
-                painter = painterResource(id = iconsR.drawable.mozac_ic_private_mode_72),
+                painter = painterResource(id = iconsR.drawable.mozac_ic_private_mode_fill_72),
                 contentDescription = null,
             )
 

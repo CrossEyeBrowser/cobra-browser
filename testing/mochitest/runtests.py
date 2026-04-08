@@ -58,7 +58,7 @@ from mozgeckoprofiler import (
     symbolicate_profile_json,
     view_gecko_profile,
 )
-from mozserve import DoHServer, Http2Server, Http3Server
+from mozserve import DoHServer, Http2Server, Http3Server, MozHttp2Server
 
 try:
     from marionette_driver.addons import Addons
@@ -349,6 +349,31 @@ class MessageLogger:
         self.dump_buffered()
         self.buffering = False
         self.logger.suite_end()
+
+
+def _port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", port))
+            return False
+        except OSError:
+            return True
+
+
+def _port_diagnostic_hint(port):
+    if sys.platform == "win32":
+        return f"netstat -ano | findstr :{port}"
+    return f"lsof -i :{port}"
+
+
+def _wait_for_port_available(port, timeout=30, interval=0.5):
+    deadline = time.monotonic() + timeout
+    while _port_in_use(port):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval)
+    return True
 
 
 ####################
@@ -1118,8 +1143,6 @@ class MochitestDesktop:
                 self.urlOpts.append("dumpDMDAfterTest=true")
             if options.debugger or options.jsdebugger:
                 self.urlOpts.append("interactiveDebugger=true")
-            if options.jscov_dir_prefix:
-                self.urlOpts.append(f"jscovDirPrefix={options.jscov_dir_prefix}")
             if options.cleanupCrashes:
                 self.urlOpts.append("cleanupCrashes=true")
             if "MOZ_XORIGIN_MOCHITEST" in env and env["MOZ_XORIGIN_MOCHITEST"] == "1":
@@ -1370,13 +1393,16 @@ class MochitestDesktop:
             raise RuntimeError("Error: Unable to start Http/3 server")
 
     def findNodeBin(self):
-        # We try to find the node executable in the path given to us by the user in
-        # the MOZ_NODE_PATH environment variable
         nodeBin = os.getenv("MOZ_NODE_PATH", None)
-        self.log.info(f"Use MOZ_NODE_PATH at {nodeBin}")
-        if not nodeBin and build:
-            nodeBin = build.substs.get("NODEJS")
-            self.log.info(f"Use build node at {nodeBin}")
+        if nodeBin:
+            self.log.info(f"Use MOZ_NODE_PATH at {nodeBin}")
+        elif build:
+            try:
+                nodeBin = build.substs.get("NODEJS")
+            except Exception:
+                nodeBin = None
+            if nodeBin:
+                self.log.info(f"Use build node at {nodeBin}")
         return nodeBin
 
     def startHttp2Server(self, options):
@@ -1398,6 +1424,35 @@ class MochitestDesktop:
         if port != options.http2ServerPort:
             raise RuntimeError("Error: Unable to start Http2 server")
 
+    def startMozHttp2Server(self, options):
+        """
+        Start a moz-http2 test server.
+        """
+        nodeBin = self.findNodeBin()
+        if not nodeBin:
+            self.log.warning("Node not found. moz-http2 server will not start.")
+            return
+
+        if not os.path.exists(nodeBin) or not os.path.isfile(nodeBin):
+            self.log.warning(
+                f"Node binary not found at {nodeBin}. moz-http2 server will not start."
+            )
+            return
+
+        serverPath = os.path.join(SCRIPT_DIR, "xpcshell", "moz-http2", "moz-http2.js")
+        if not os.path.exists(serverPath):
+            self.log.warning(f"moz-http2.js not found at {serverPath}")
+            return
+
+        serverOptions = {}
+        serverOptions["nodeBin"] = nodeBin
+        serverOptions["serverPath"] = serverPath
+        serverOptions["isWin"] = mozinfo.isWin
+
+        env = test_environment(xrePath=options.xrePath, log=self.log)
+        self.mozHttp2Server = MozHttp2Server(serverOptions, env, self.log)
+        self.mozHttp2Server.start()
+
     def startDoHServer(self, options, dstServerPort, alpn):
         serverOptions = {}
         serverOptions["serverPath"] = os.path.join(
@@ -1417,6 +1472,21 @@ class MochitestDesktop:
             raise RuntimeError("Error: Unable to start DoH server")
 
     def startServers(self, options, debuggerInfo, public=None):
+        port_attrs = [
+            ("httpPort", "HTTP test server"),
+            ("sslPort", "ssltunnel"),
+            ("webSocketPort", "WebSocket server"),
+        ]
+        for attr, name in port_attrs:
+            port = int(getattr(options, attr))
+            if _port_in_use(port):
+                new_port = self.findFreePort(socket.SOCK_STREAM)
+                self.log.info(
+                    f"{name} port {port} already in use, "
+                    f"falling back to port {new_port}"
+                )
+                setattr(options, attr, str(new_port))
+
         # start servers and set ports
         # TODO: pass these values, don't set on `self`
         self.webServer = options.webServer
@@ -1453,6 +1523,7 @@ class MochitestDesktop:
         self.log.info(f"use http3 server: {options.useHttp3Server}")
         self.http3Server = None
         self.http2Server = None
+        self.mozHttp2Server = None
         self.dohServer = None
         if options.useHttp3Server:
             self.startHttp3Server(options)
@@ -1460,6 +1531,8 @@ class MochitestDesktop:
         elif options.useHttp2Server:
             self.startHttp2Server(options)
             self.startDoHServer(options, options.http2ServerPort, "h2")
+
+        self.startMozHttp2Server(options)
 
     def stopServers(self):
         """Servers are no longer needed, and perhaps more importantly, anything they
@@ -1507,6 +1580,11 @@ class MochitestDesktop:
                 self.dohServer.stop()
             except Exception:
                 self.log.critical("Exception stopping doh server")
+        if self.mozHttp2Server is not None:
+            try:
+                self.mozHttp2Server.stop()
+            except Exception:
+                self.log.critical("Exception stopping moz-http2 server")
 
         if hasattr(self, "gstForV4l2loopbackProcess"):
             try:
@@ -1928,8 +2006,6 @@ toolbar#nav-bar {
             if (v is None) or isinstance(v, (str, numbers.Number))
         )
         d["testRoot"] = self.testRoot
-        if options.jscov_dir_prefix:
-            d["jscovDirPrefix"] = options.jscov_dir_prefix
         if not options.keep_open:
             d["closeWhenDone"] = "1"
 
@@ -2837,6 +2913,21 @@ toolbar#nav-bar {
                 process_args=kp_kwargs,
             )
 
+            marionette_port = (
+                marionette_args.get("port", 2828) if marionette_args else 2828
+            )
+            if _port_in_use(marionette_port):
+                new_port = self.findFreePort(socket.SOCK_STREAM)
+                self.log.info(
+                    f"Marionette port {marionette_port} already in use, "
+                    f"falling back to port {new_port}"
+                )
+                marionette_port = new_port
+                if marionette_args is None:
+                    marionette_args = {}
+                marionette_args["port"] = new_port
+                self.profile.set_preferences({"marionette.port": new_port})
+
             # start the runner
             try:
                 runner.start(
@@ -3048,7 +3139,13 @@ toolbar#nav-bar {
         options.manifestFile = None
         # When runByManifest is true, runTests already sets profilePath
         # appropriately for each manifest (from profile-path key, or None).
-        if not options.runByManifest:
+        # restartAfterFailure and restartBetweenTests loop within runMochitests
+        # and need a fresh profile for each browser restart.
+        if (
+            not options.runByManifest
+            or options.restartAfterFailure
+            or options.restartBetweenTests
+        ):
             options.profilePath = None
 
     def initializeVirtualAudioDevices(self):
@@ -3259,7 +3356,10 @@ toolbar#nav-bar {
                     )
                     bisection_log = 1
 
-            result = self.doTests(options, testsToRun, manifestToFilter)
+            if options.restartBetweenTests:
+                result = self.doTests(options, testsToRun[:1], manifestToFilter)
+            else:
+                result = self.doTests(options, testsToRun, manifestToFilter)
             if result == TBPL_RETRY:  # terminate task
                 return result
 
@@ -3278,6 +3378,10 @@ toolbar#nav-bar {
                     testsToRun = testsToRun[firstFail + 1 :]
                     if testsToRun == []:
                         status = -1
+            elif options.restartBetweenTests:
+                testsToRun = testsToRun[1:]
+                if not testsToRun:
+                    status = -1
             else:
                 status = -1
 
@@ -3462,19 +3566,12 @@ toolbar#nav-bar {
             "http3": options.useHttp3Server,
             "http2": options.useHttp2Server,
             "inc_origin_init": os.environ.get("MOZ_ENABLE_INC_ORIGIN_INIT") == "1",
-            # Until the test harness can understand default pref values,
-            # (https://bugzilla.mozilla.org/show_bug.cgi?id=1577912) this value
-            # should by synchronized with the default pref value indicated in
-            # StaticPrefList.yaml.
-            #
-            # Currently for automation, the pref defaults to true (but can be
-            # overridden with --setpref).
-            "sessionHistoryInParent": not options.disable_fission
-            or not self.extraPrefs.get("fission.disableSessionHistoryInParent"),
+            "sessionHistoryInParent": True,
             "socketprocess_e10s": self.extraPrefs.get("network.process.enabled", False),
             "socketprocess_networking": self.extraPrefs.get(
                 "network.http.network_access_on_socket_process.enabled", False
             ),
+            "standalone": options.restartBetweenTests,
             "swgl": self.extraPrefs.get("gfx.webrender.software", False),
             "verify": options.verify,
             "verify_fission": options.verify_fission,
@@ -3580,17 +3677,6 @@ toolbar#nav-bar {
                     f"The following extra environment variables will be set:\n  {env_list}"
                 )
 
-            self.parseAndCreateTestsDirs(m)
-
-            profilePath = list(self.profile_path_by_manifest[m])[0]
-            if profilePath:
-                options.profilePath = os.path.expanduser(profilePath.strip())
-                self.log.info(
-                    f"The following profile path will be set:\n  {options.profilePath}"
-                )
-            else:
-                options.profilePath = None
-
             # If we are using --run-by-manifest, we should not use the profile path (if) provided
             # by the user, since we need to create a new directory for each run. We would face
             # problems if we use the directory provided by the user.
@@ -3687,8 +3773,27 @@ toolbar#nav-bar {
     def doTests(self, options, testsToFilter=None, manifestToFilter=None):
         # A call to initializeLooping method is required in case of --run-by-dir or --bisect-chunk
         # since we need to initialize variables for each loop.
-        if options.bisectChunk or options.runByManifest:
+        if (
+            options.bisectChunk
+            or options.runByManifest
+            or options.restartAfterFailure
+            or options.restartBetweenTests
+        ):
             self.initializeLooping(options)
+
+        # Set up manifest-level test-directories and profile-path.
+        # In restart modes this runs on each iteration, ensuring a clean
+        # slate after cleanup() removed the previous directories.
+        if manifestToFilter:
+            self.parseAndCreateTestsDirs(manifestToFilter)
+            profilePath = list(self.profile_path_by_manifest[manifestToFilter])[0]
+            if profilePath:
+                options.profilePath = os.path.expanduser(profilePath.strip())
+                self.log.info(
+                    f"The following profile path will be set:\n  {options.profilePath}"
+                )
+            else:
+                options.profilePath = None
 
         # get debugger info, a dict of:
         # {'path': path to the debugger (string),
@@ -3756,7 +3861,12 @@ toolbar#nav-bar {
 
         status = 0
         try:
-            self.startServers(options, debuggerInfo)
+            if self.startServers(options, debuggerInfo) is False:
+                return 1
+
+            if self.mozHttp2Server is not None:
+                for key, value in self.mozHttp2Server.ports().items():
+                    self.browserEnv[key] = value
 
             if options.jsconsole:
                 options.browserArgs.extend(["--jsconsole"])
@@ -3792,16 +3902,13 @@ toolbar#nav-bar {
             if "MOZ_CHAOSMODE=0xfb" in options.environment and timeout:
                 timeout *= 2
 
-            # Detect shutdown leaks for m-bc runs if
-            # code coverage is not enabled.
-            detectShutdownLeaks = False
-            if options.jscov_dir_prefix is None:
-                detectShutdownLeaks = (
-                    mozinfo.info["debug"]
-                    and options.flavor == "browser"
-                    and options.subsuite != "thunderbird"
-                    and not options.crashAsPass
-                )
+            # Detect shutdown leaks for m-bc runs
+            detectShutdownLeaks = (
+                mozinfo.info["debug"]
+                and options.flavor == "browser"
+                and options.subsuite != "thunderbird"
+                and not options.crashAsPass
+            )
 
             self.start_script_kwargs["flavor"] = self.normflavor(options.flavor)
             marionette_args = {
@@ -3913,13 +4020,6 @@ toolbar#nav-bar {
         # out and leaking memory.
         if options.flavor == "chrome" and mozinfo.isWin:
             leakThresholds["default"] += 1296
-
-        # Stop leak detection if m-bc code coverage is enabled
-        # by maxing out the leak threshold for all processes.
-        if options.jscov_dir_prefix:
-            for processType in leakThresholds:
-                ignoreMissingLeaks.append(processType)
-                leakThresholds[processType] = sys.maxsize
 
         utilityPath = options.utilityPath or options.xrePath
         if status == 0:

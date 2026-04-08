@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -11,6 +9,7 @@
 #include "mozilla/Permission.h"
 #include "mozilla/PermissionDelegateHandler.h"
 #include "mozilla/PermissionManager.h"
+#include "mozilla/dom/BrowsingContext.h"
 #include "mozilla/dom/WorkerPrivate.h"
 #include "mozilla/dom/WorkerRef.h"
 #include "nsGlobalWindowInner.h"
@@ -109,10 +108,62 @@ bool PermissionStatusSink::MaybeUpdatedByOnMainThread(
   return mPrincipalForPermission->Equals(permissionPrincipal);
 }
 
+bool PermissionStatusSink::MaybeUpdatedByBrowserPermOnMainThread(
+    nsIPermission* aPermission) {
+  MOZ_ASSERT(NS_IsMainThread());
+
+  if (!MaybeUpdatedByOnMainThread(aPermission)) {
+    return false;
+  }
+
+  if (!mPermissionStatus) {
+    return false;
+  }
+
+  uint64_t permBrowserId = 0;
+  aPermission->GetBrowserId(&permBrowserId);
+  if (!permBrowserId) {
+    return false;
+  }
+
+  RefPtr<nsGlobalWindowInner> window = mPermissionStatus->GetOwnerWindow();
+  if (!window) {
+    return false;
+  }
+
+  RefPtr<BrowsingContext> bc = window->GetBrowsingContext();
+  if (!bc) {
+    return false;
+  }
+
+  return bc->Top()->BrowserId() == permBrowserId;
+}
+
 bool PermissionStatusSink::MaybeUpdatedByNotifyOnlyOnMainThread(
     nsPIDOMWindowInner* aInnerWindow) {
   MOZ_ASSERT(NS_IsMainThread());
   return false;
+}
+
+bool PermissionStatusSink::MaybeAffectedByBrowserIdOnMainThread(
+    uint64_t aBrowserId) {
+  MOZ_ASSERT(NS_IsMainThread());
+
+  if (!mPermissionStatus) {
+    return false;
+  }
+
+  RefPtr<nsGlobalWindowInner> window = mPermissionStatus->GetOwnerWindow();
+  if (!window) {
+    return false;
+  }
+
+  RefPtr<BrowsingContext> bc = window->GetBrowsingContext();
+  if (!bc) {
+    return false;
+  }
+
+  return bc->Top()->BrowserId() == aBrowserId;
 }
 
 void PermissionStatusSink::PermissionChangedOnMainThread() {

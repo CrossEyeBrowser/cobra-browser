@@ -13,6 +13,8 @@ import "chrome://browser/content/aiwindow/components/chat-assistant-loader.mjs";
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://browser/content/aiwindow/components/website-chip-container.mjs";
 
+const FOLLOW_UP_QTY = 2;
+
 /**
  * A custom element for managing AI Chat Content
  */
@@ -24,7 +26,12 @@ export class AIChatContent extends MozLitElement {
     errorObj: { type: Object },
     isSearching: { type: Boolean },
     tokens: { type: Object },
+    seenUrls: { type: Object },
+    conversationId: { type: String },
   };
+
+  #lastScrollReq = null;
+  #overflowObserver = null;
 
   constructor() {
     super();
@@ -33,6 +40,21 @@ export class AIChatContent extends MozLitElement {
     this.followUpSuggestions = [];
     this.errorObj = null;
     this.isSearching = false;
+
+    /**
+     * The set of URLs that have been seen by the conversation. Used for determining
+     * if a URL will be unfurled or not.
+     *
+     * @type {Set<string>}
+     */
+    this.seenUrls = new Set();
+
+    /**
+     * The current conversationId for the seenUrls.
+     *
+     * @type {null | string}
+     */
+    this.conversationId = null;
   }
 
   connectedCallback() {
@@ -43,6 +65,13 @@ export class AIChatContent extends MozLitElement {
       new CustomEvent("AIChatContent:Ready", { bubbles: true })
     );
     this.#initFooterActionListeners();
+    this.#initOverflowObserver();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.#overflowObserver?.disconnect();
+    this.#overflowObserver = null;
   }
 
   #dispatchAction(action, detail) {
@@ -79,6 +108,11 @@ export class AIChatContent extends MozLitElement {
     );
 
     this.addEventListener(
+      "aiChatContentActor:seen-urls",
+      this.#handleSeenUrls.bind(this)
+    );
+
+    this.addEventListener(
       "aiChatError:retry-message",
       this.retryUserMessageAfterError.bind(this)
     );
@@ -91,6 +125,11 @@ export class AIChatContent extends MozLitElement {
     this.addEventListener(
       "aiChatError:new-chat",
       this.openNewChatAfterError.bind(this)
+    );
+
+    this.addEventListener(
+      "aiChatError:sign-in",
+      this.openAccountSignInAfterError.bind(this)
     );
   }
 
@@ -117,6 +156,33 @@ export class AIChatContent extends MozLitElement {
     this.addEventListener("remove-applied-memory", event => {
       this.#dispatchAction("remove-applied-memory", event.detail);
     });
+
+    this.addEventListener("toggle-applied-memories", event => {
+      this.#dispatchAction("toggle-applied-memories", event.detail);
+    });
+
+    this.addEventListener("manage-memories", event => {
+      this.#dispatchAction("manage-memories", event.detail);
+    });
+
+    this.addEventListener("open-memories-learn-more", event => {
+      this.#dispatchAction("open-memories-learn-more", event.detail);
+    });
+  }
+
+  #initOverflowObserver() {
+    this.#overflowObserver = new ResizeObserver(() => {
+      const wrapper = this.shadowRoot.querySelector(".chat-content-wrapper");
+      wrapper?.toggleAttribute(
+        "overflowing",
+        wrapper.scrollHeight > wrapper.clientHeight
+      );
+    });
+    this.updateComplete.then(() => {
+      this.#overflowObserver.observe(
+        this.shadowRoot.querySelector(".chat-inner-wrapper")
+      );
+    });
   }
 
   #getAssistantMessageBody(messageId) {
@@ -142,6 +208,23 @@ export class AIChatContent extends MozLitElement {
     );
   }
 
+  /**
+   * Add new seen URLs to the current conversation.
+   *
+   * @param {object} event
+   * @param {object} event.detail
+   * @param {string} event.detail.conversationId
+   * @param {Set<string>} event.detail.seenUrls
+   */
+  #handleSeenUrls({ detail: { conversationId, seenUrls } }) {
+    if (this.conversationId == conversationId) {
+      this.seenUrls = this.seenUrls.union(seenUrls);
+    } else {
+      this.conversationId = conversationId;
+      this.seenUrls = seenUrls;
+    }
+  }
+
   messageEvent(event) {
     const message = event.detail;
 
@@ -151,10 +234,10 @@ export class AIChatContent extends MozLitElement {
     }
 
     this.errorObj = null;
-    this.#checkConversationState(message);
 
     switch (message.role) {
       case "loading":
+        this.#checkConversationState(message);
         this.handleLoadingEvent(event);
         break;
       case "assistant":
@@ -165,10 +248,26 @@ export class AIChatContent extends MozLitElement {
         this.#checkConversationState(message);
         this.handleUserPromptEvent(event);
         break;
+      case "assistant-message-complete":
+        this.#setMessageCompleteAttr(message);
+        break;
       // Used to clear the conversation state via side effects ( new conv id )
       case "clear-conversation":
         this.#checkConversationState(message);
     }
+  }
+
+  #setMessageCompleteAttr(message) {
+    const assistantLastMessage = this.conversationState.findLast(
+      msg => msg?.messageId === message.content.id
+    );
+
+    if (!assistantLastMessage) {
+      return;
+    }
+
+    assistantLastMessage.isLastChunk = true;
+    this.requestUpdate();
   }
 
   /**
@@ -192,6 +291,9 @@ export class AIChatContent extends MozLitElement {
     if (convIdChanged || isReloadingSameConvo) {
       this.conversationState = [];
       this.followUpSuggestions = [];
+      this.shadowRoot
+        ?.querySelector(".chat-inner-wrapper")
+        ?.style.removeProperty("--content-height");
       this.requestUpdate();
     }
   }
@@ -201,7 +303,6 @@ export class AIChatContent extends MozLitElement {
     this.isSearching = !!isSearching;
     this.assistantIsLoading = true;
     this.requestUpdate();
-    this.#scrollToBottom();
   }
 
   handleErrorEvent(error) {
@@ -219,17 +320,22 @@ export class AIChatContent extends MozLitElement {
 
   handleUserPromptEvent(event) {
     this.followUpSuggestions = [];
-    const { convId, content, ordinal } = event.detail;
-    this.assistantIsLoading = true;
+    const { convId, content, ordinal, isPreviousMessage } = event.detail;
+    if (!isPreviousMessage) {
+      this.assistantIsLoading = true;
+    }
     this.conversationState[ordinal] = {
       role: "user",
       body: content.body,
       contextMentions: content.contextMentions,
+      pageUrl: content.contextPageUrl ?? null,
       convId,
       ordinal,
     };
     this.requestUpdate();
-    this.#scrollToBottom();
+    if (!isPreviousMessage) {
+      this.#scrollUserMessageIntoView();
+    }
   }
 
   retryUserMessageAfterError() {
@@ -265,22 +371,20 @@ export class AIChatContent extends MozLitElement {
       id: messageId,
       content,
       memoriesApplied,
-      tokens,
+      showMemoriesCallout,
       webSearchQueries,
+      followUpSuggestions = [],
+      isPreviousMessage,
     } = event.detail;
 
     if (typeof content.body !== "string" || !content.body) {
       return;
     }
 
-    // The "webSearchQueries" are coming from a conversation that is being initialized
-    // and "tokens" are streaming in from a live conversation.
-    const searchTokens = webSearchQueries ?? tokens?.search ?? [];
-
-    // Prefer showing web search handoff over followup suggestions.
-    this.followUpSuggestions = searchTokens.length
+    // favor web search display over follow ups.
+    this.followUpSuggestions = webSearchQueries.length
       ? []
-      : (tokens?.followup ?? []).slice(0, 2);
+      : followUpSuggestions.slice(0, FOLLOW_UP_QTY);
 
     this.conversationState[ordinal] = {
       role: "assistant",
@@ -288,18 +392,40 @@ export class AIChatContent extends MozLitElement {
       messageId,
       body: content.body,
       appliedMemories: memoriesApplied ?? [],
-      searchTokens,
+      showCallout: showMemoriesCallout ?? false,
+      searchTokens: webSearchQueries ?? [],
+      isLastChunk: !!isPreviousMessage,
     };
 
     this.requestUpdate();
   }
 
-  #scrollToBottom() {
+  #scrollUserMessageIntoView() {
+    let scrollReq = {};
+    this.#lastScrollReq = scrollReq;
     this.updateComplete.then(() => {
-      const wrapper = this.shadowRoot?.querySelector(".chat-content-wrapper");
-      wrapper?.lastElementChild?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
+      const msgs = this.shadowRoot?.querySelectorAll(".chat-bubble-user");
+      if (!msgs?.length) {
+        return;
+      }
+      let lastMessage = msgs[msgs.length - 1];
+      let haveMultipleMessages = msgs.length > 1;
+      requestAnimationFrame(() => {
+        if (scrollReq !== this.#lastScrollReq) {
+          return;
+        }
+        let elTop = lastMessage.offsetTop;
+        let spacer = haveMultipleMessages ? "small" : "large";
+        lastMessage.parentNode.style.setProperty(
+          "--content-height",
+          `calc(${elTop}px + 100% - var(--space-${spacer}) - var(--space-xsmall))`
+        );
+
+        requestAnimationFrame(() => {
+          if (scrollReq == this.#lastScrollReq) {
+            lastMessage.scrollIntoView({ block: "start" });
+          }
+        });
       });
     });
   }
@@ -342,27 +468,65 @@ export class AIChatContent extends MozLitElement {
     this.dispatchEvent(event);
   }
 
-  #renderMessage(msg) {
+  /**
+   * Returns the chips to display for a message, suppressing the current-tab
+   * chip when the page context hasn't changed since the previous user message.
+   *
+   * @param {object} msg - A conversationState entry.
+   * @param {string|null} lastContextPageUrl - The page URL of the preceding
+   * user message, or undefined if there is none.
+   * @returns {ContextWebsite[]}
+   */
+  #getVisibleChips(msg, lastContextPageUrl) {
+    // If this message is on the same page as the previous message,
+    // hide the page URL chip to avoid showing duplicate page context
+    if (!msg || msg.role !== "user" || !msg.contextMentions?.length) {
+      return [];
+    }
+    const currentPageUrl = msg.pageUrl;
+    const shouldHideDuplicatePageChip =
+      currentPageUrl && currentPageUrl === lastContextPageUrl;
+    if (shouldHideDuplicatePageChip) {
+      return msg.contextMentions.filter(
+        chip => URL.parse(chip.url)?.href !== currentPageUrl
+      );
+    }
+    return msg.contextMentions;
+  }
+
+  openAccountSignInAfterError() {
+    const event = new CustomEvent("AIChatContent:AccountSignIn", {
+      bubbles: true,
+      composed: true,
+    });
+    this.dispatchEvent(event);
+  }
+
+  #renderMessage(msg, chips) {
     if (!msg) {
       return nothing;
     }
     return html`
       <div class=${`chat-bubble chat-bubble-${msg.role}`}>
-        ${msg.role === "user" && msg.contextMentions?.length
+        ${chips?.length
           ? html`<website-chip-container
-              .websites=${msg.contextMentions}
+              .websites=${chips}
             ></website-chip-container>`
           : nothing}
         <ai-chat-message
           .message=${msg.body}
           .role=${msg.role}
+          .messageId=${msg.messageId}
           .searchTokens=${msg.searchTokens || []}
+          .conversationId=${this.conversationId}
+          .seenUrls=${this.seenUrls}
         ></ai-chat-message>
-        ${msg.role === "assistant"
+        ${msg.role === "assistant" && msg.isLastChunk
           ? html`
               <assistant-message-footer
                 .messageId=${msg.messageId}
                 .appliedMemories=${msg.appliedMemories}
+                .showCallout=${msg.showCallout}
               ></assistant-message-footer>
             `
           : nothing}
@@ -401,6 +565,17 @@ export class AIChatContent extends MozLitElement {
     ></chat-assistant-error>`;
   }
 
+  #renderMessages() {
+    let lastContextPageUrl;
+    return this.conversationState.map(msg => {
+      const chips = this.#getVisibleChips(msg, lastContextPageUrl);
+      if (msg?.role === "user") {
+        lastContextPageUrl = msg.pageUrl;
+      }
+      return this.#renderMessage(msg, chips);
+    });
+  }
+
   render() {
     return html`
       <link
@@ -408,9 +583,10 @@ export class AIChatContent extends MozLitElement {
         href="chrome://browser/content/aiwindow/components/ai-chat-content.css"
       />
       <div class="chat-content-wrapper">
-        ${this.conversationState.map(msg => this.#renderMessage(msg))}
-        ${this.#renderFollowUpSuggestions()} ${this.#renderLoader()}
-        ${this.#renderError()}
+        <div class="chat-inner-wrapper">
+          ${this.#renderMessages()} ${this.#renderFollowUpSuggestions()}
+          ${this.#renderLoader()} ${this.#renderError()}
+        </div>
       </div>
     `;
   }

@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -63,7 +61,7 @@ class LoadedScript : public nsIMemoryReporter {
   LoadedScript(ScriptKind aKind, mozilla::dom::ReferrerPolicy aReferrerPolicy,
                ScriptFetchOptions* aFetchOptions, nsIURI* aURI);
 
-  LoadedScript(const LoadedScript& aOther);
+  LoadedScript(const LoadedScript& aOther, ScriptFetchOptions* aFetchOptions);
 
   template <typename T, typename... Args>
   friend RefPtr<T> mozilla::MakeRefPtr(Args&&... aArgs);
@@ -83,6 +81,18 @@ class LoadedScript : public nsIMemoryReporter {
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS;
   NS_DECL_NSIMEMORYREPORTER;
   NS_DECL_CYCLE_COLLECTION_CLASS(LoadedScript)
+
+  // Create a new instance from a cache, with a different aFetchOptions.
+  static already_AddRefed<LoadedScript> FromCache(
+      const LoadedScript& aScript, ScriptFetchOptions* aFetchOptions);
+
+  uint16_t ClampedRefCountForTelemetry() const {
+    uintptr_t count = mRefCnt.get();
+    if (count > 100) {
+      return 100;
+    }
+    return uint16_t(count);
+  }
 
   bool IsClassicScript() const { return mKind == ScriptKind::eClassic; }
   bool IsModuleScript() const { return mKind == ScriptKind::eModule; }
@@ -343,6 +353,9 @@ class LoadedScript : public nsIMemoryReporter {
   void SetTookLongInPreviousRuns() { mTookLongInPreviousRuns = true; }
   bool TookLongInPreviousRuns() const { return mTookLongInPreviousRuns; }
 
+  void SetIsEverHitFromMemoryCache() { mIsEverHitFromMemoryCache = true; }
+  bool IsEverHitFromMemoryCache() const { return mIsEverHitFromMemoryCache; }
+
   /*
    * Set the mBaseURL, based on aChannel.
    * aOriginalURI is the result of aChannel->GetOriginalURI.
@@ -446,6 +459,9 @@ class LoadedScript : public nsIMemoryReporter {
   //
   // TODO: Move this into JS::Stencil, and save to the disk cache (bug 2005128)
   uint64_t mTookLongInPreviousRuns : 1;
+
+  // Set to true if this entry is ever used in the current process.
+  uint64_t mIsEverHitFromMemoryCache : 1;
 
   RefPtr<ScriptFetchOptions> mFetchOptions;
   nsCOMPtr<nsIURI> mURI;
@@ -679,7 +695,7 @@ class ModuleScript final : public LoadedScript {
   ModuleScript(mozilla::dom::ReferrerPolicy aReferrerPolicy,
                ScriptFetchOptions* aFetchOptions, nsIURI* aURI);
 
-  explicit ModuleScript(const LoadedScript& other);
+  ModuleScript(const LoadedScript& other, ScriptFetchOptions* aFetchOptions);
 
   template <typename T, typename... Args>
   friend RefPtr<T> mozilla::MakeRefPtr(Args&&... aArgs);
@@ -689,7 +705,8 @@ class ModuleScript final : public LoadedScript {
  public:
   // Convert between cacheable LoadedScript instance, which is used by
   // mozilla::dom::SharedScriptCache.
-  static already_AddRefed<ModuleScript> FromCache(const LoadedScript& aScript);
+  static already_AddRefed<ModuleScript> FromCache(
+      const LoadedScript& aScript, ScriptFetchOptions* aFetchOptions);
   already_AddRefed<LoadedScript> ToCache();
 
   void SetModuleRecord(Handle<JSObject*> aModuleRecord);

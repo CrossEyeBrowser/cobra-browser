@@ -430,7 +430,7 @@ pub(crate) struct AllocationSizes {
 }
 
 impl AllocationSizes {
-    #[allow(dead_code)] // may be unused on some platforms
+    #[allow(dead_code, reason = "may be unused on some platforms")]
     pub(crate) fn from_memory_hints(memory_hints: &wgt::MemoryHints) -> Self {
         // TODO: the allocator's configuration should take hardware capability into
         // account.
@@ -483,13 +483,13 @@ impl From<AllocationSizes> for gpu_allocator::AllocationSizes {
     }
 }
 
-#[allow(dead_code)] // may be unused on some platforms
+#[allow(dead_code, reason = "may be unused on some platforms")]
 #[cold]
 fn hal_usage_error<T: fmt::Display>(txt: T) -> ! {
     panic!("wgpu-hal invariant was violated (usage error): {txt}")
 }
 
-#[allow(dead_code)] // may be unused on some platforms
+#[allow(dead_code, reason = "may be unused on some platforms")]
 #[cold]
 fn hal_internal_error<T: fmt::Display>(txt: T) -> ! {
     panic!("wgpu-hal ran into a preventable internal error: {txt}")
@@ -527,6 +527,10 @@ pub enum SurfaceError {
     Lost,
     #[error("Surface is outdated, needs to be re-created")]
     Outdated,
+    #[error("Timed out waiting for a surface texture")]
+    Timeout,
+    #[error("The window is occluded (e.g. minimized or behind another window). Try again once the window is no longer occluded.")]
+    Occluded,
     #[error(transparent)]
     Device(#[from] DeviceError),
     #[error("Other reason: {0}")]
@@ -551,14 +555,14 @@ pub struct InstanceError {
 }
 
 impl InstanceError {
-    #[allow(dead_code)] // may be unused on some platforms
+    #[allow(dead_code, reason = "may be unused on some platforms")]
     pub(crate) fn new(message: String) -> Self {
         Self {
             message,
             source: None,
         }
     }
-    #[allow(dead_code)] // may be unused on some platforms
+    #[allow(dead_code, reason = "may be unused on some platforms")]
     pub(crate) fn with_source(message: String, source: impl Error + Send + Sync + 'static) -> Self {
         cfg_if::cfg_if! {
             if #[cfg(supports_ptr_atomics)] {
@@ -691,8 +695,8 @@ pub trait Surface: WasmNotSendSync {
     /// `self`.
     ///
     /// If `timeout` elapses before `self` has a texture ready to be acquired,
-    /// return `Ok(None)`. If `timeout` is `None`, wait indefinitely, with no
-    /// timeout.
+    /// return `Err(SurfaceError::Timeout)`. If `timeout` is `None`, wait
+    /// indefinitely, with no timeout.
     ///
     /// # Using an [`AcquiredSurfaceTexture`]
     ///
@@ -716,6 +720,10 @@ pub trait Surface: WasmNotSendSync {
     /// Some backends can't support a timeout when acquiring a texture. On these
     /// backends, `timeout` is ignored.
     ///
+    /// On macOS, this returns `Err(SurfaceError::Timeout)` when the window is
+    /// not visible (minimized, fully occluded, or on another virtual desktop)
+    /// to avoid blocking in `CAMetalLayer.nextDrawable()`.
+    ///
     /// # Safety
     ///
     /// - The surface `self` must currently be configured on some [`Device`].
@@ -724,7 +732,7 @@ pub trait Surface: WasmNotSendSync {
     ///   [`Queue::submit`] that used [`Texture`]s acquired from this surface.
     ///
     /// - You may only have one texture acquired from `self` at a time. When
-    ///   `acquire_texture` returns `Ok(Some(ast))`, you must pass the returned
+    ///   `acquire_texture` returns `Ok(ast)`, you must pass the returned
     ///   [`SurfaceTexture`] `ast.texture` to either [`Queue::present`] or
     ///   [`Surface::discard_texture`] before calling `acquire_texture` again.
     ///
@@ -738,7 +746,7 @@ pub trait Surface: WasmNotSendSync {
         &self,
         timeout: Option<core::time::Duration>,
         fence: &<Self::A as Api>::Fence,
-    ) -> Result<Option<AcquiredSurfaceTexture<Self::A>>, SurfaceError>;
+    ) -> Result<AcquiredSurfaceTexture<Self::A>, SurfaceError>;
 
     /// Relinquish an acquired texture without presenting it.
     ///
@@ -786,6 +794,16 @@ pub trait Adapter: WasmNotSendSync {
     ///
     /// [`PresentationTimestamp`]: wgt::PresentationTimestamp
     unsafe fn get_presentation_timestamp(&self) -> wgt::PresentationTimestamp;
+
+    /// The combination of all usages that the are guaranteed to be be ordered by the hardware.
+    /// If a usage is ordered, then if the buffer state doesn't change between draw calls,
+    /// there are no barriers needed for synchronization.
+    fn get_ordered_buffer_usages(&self) -> wgt::BufferUses;
+
+    /// The combination of all usages that the are guaranteed to be be ordered by the hardware.
+    /// If a usage is ordered, then if the buffer state doesn't change between draw calls,
+    /// there are no barriers needed for synchronization.
+    fn get_ordered_texture_usages(&self) -> wgt::TextureUses;
 }
 
 /// A connection to a GPU and a pool of resources to use with it.

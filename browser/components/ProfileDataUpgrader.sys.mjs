@@ -947,8 +947,40 @@ export let ProfileDataUpgrader = {
       }
     }
 
-    // Updating from 161 to 165 to trigger re-migrations of the Rusts store.
-    if (existingDataVersion < 165) {
+    if (existingDataVersion < 166) {
+      // Bug 1978550: Migrate Local Network Access permissions from old
+      // "localhost" type to new "loopback-network" type.
+      try {
+        Services.perms.getAllByTypes(["localhost"]).forEach(permission => {
+          Services.perms.removePermission(permission);
+          Services.perms.addFromPrincipal(
+            permission.principal,
+            "loopback-network",
+            permission.capability,
+            permission.expireType,
+            permission.expireTime
+          );
+        });
+      } catch (e) {
+        console.error("Error migrating localhost permission", e);
+      }
+
+      // Migrate permissions.default.localhost preference to
+      // permissions.default.loopback-network
+      try {
+        const oldValue = Services.prefs.getIntPref(
+          "permissions.default.localhost"
+        );
+        Services.prefs.setIntPref(
+          "permissions.default.loopback-network",
+          oldValue
+        );
+        Services.prefs.clearUserPref("permissions.default.localhost");
+      } catch (e) {}
+    }
+
+    // Updating from 167 to 168 to trigger re-migrations of the Rusts store.
+    if (existingDataVersion < 168) {
       // Force all logins to be re-migrated to the rust store.
       Services.prefs.setBoolPref("signon.rustMirror.migrationNeeded", true);
     }

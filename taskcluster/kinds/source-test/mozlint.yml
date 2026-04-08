@@ -481,7 +481,7 @@ yaml:
 rst:
     description: rst lint run over the gecko codebase
     treeherder:
-        symbol: text(rst)
+        symbol: doc(rst)
     run:
         mach: lint -v -l rst -f treeherder -f json:/builds/worker/mozlint.json .
     when:
@@ -700,7 +700,7 @@ file-perm:
 perfdocs-verify:
     description: Verifies Performance Testing documentation
     treeherder:
-        symbol: text(perfdocs)
+        symbol: doc(perfdocs)
     run:
         mach: lint -v -l perfdocs -f treeherder -f json:/builds/worker/mozlint.json .
     worker:
@@ -776,7 +776,7 @@ trojan-source:
     treeherder:
         symbol: misc(trojan-source)
     run:
-        mach: lint -v -l trojan-source --include-third-party -f treeherder -f json:/builds/worker/mozlint.json .
+        mach: lint -v -l trojan-source -f treeherder -f json:/builds/worker/mozlint.json .
     when:
         files-changed:
             - '**/*.c'
@@ -832,6 +832,20 @@ header-guards:
             - '**/*.hpp'
             - 'tools/lint/header-guards.yml'
             - 'tools/lint/header_guards/**'
+
+android-expired-strings:
+    description: Check for references to Android strings marked for removal
+    treeherder:
+        symbol: android(expired-strings)
+    run:
+        mach: lint -v -l android-expired-strings -f treeherder -f json:/builds/worker/mozlint.json .
+    when:
+        files-changed:
+            - 'mobile/android/**/*.kt'
+            - 'mobile/android/**/*.java'
+            - 'mobile/android/**/*.xml'
+            - 'tools/lint/android-expired-strings.yml'
+            - 'tools/lint/android-expired-strings/**'
 
 gecko-trace:
     description: Check that all `gecko-trace.yaml` files are correct

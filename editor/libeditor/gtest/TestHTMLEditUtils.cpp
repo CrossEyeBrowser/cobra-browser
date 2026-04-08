@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -2378,8 +2377,7 @@ TEST(HTMLEditUtilsTest, BRElementPosition)
            BRElementPositionTest{u"<div><br><br></div>",
                                  "div > br + br",
                                  {LineBreakIs::FollowedByCurrentBlockBoundary,
-                                  LineBreakIs::FollowingLineBreak,
-                                  LineBreakIs::FollowingCurrentBlockBoundary},
+                                  LineBreakIs::FollowingLineBreak},
                                  true,
                                  false},
            BRElementPositionTest{u"<div><br><div><br></div></div>",
@@ -2446,6 +2444,11 @@ TEST(HTMLEditUtilsTest, BRElementPosition)
         testData.mExpectedPosition.contains(
             LineBreakIs::FollowedByCurrentBlockBoundary))
         << "IsBRElementFollowedByCurrentBlockBoundary: " << testData;
+    EXPECT_EQ(
+        HTMLEditUtils::IsBRElementFollowingCurrentBlockBoundary(*brElement),
+        testData.mExpectedPosition.contains(
+            LineBreakIs::FollowingCurrentBlockBoundary))
+        << "IsBRElementFollowingCurrentBlockBoundary: " << testData;
     EXPECT_EQ(
         HTMLEditUtils::IsBRElementFollowedByOtherBlockBoundary(*brElement),
         testData.mExpectedPosition.contains(

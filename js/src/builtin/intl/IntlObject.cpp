@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -12,7 +10,6 @@
 #include "mozilla/intl/Calendar.h"
 #include "mozilla/intl/Collator.h"
 #include "mozilla/intl/Currency.h"
-#include "mozilla/intl/MeasureUnitGenerated.h"
 #include "mozilla/intl/TimeZone.h"
 
 #include <algorithm>
@@ -24,6 +21,7 @@
 #include "builtin/Array.h"
 #include "builtin/intl/CommonFunctions.h"
 #include "builtin/intl/LocaleNegotiation.h"
+#include "builtin/intl/MeasureUnitGenerated.h"
 #include "builtin/intl/NumberingSystemsGenerated.h"
 #include "builtin/intl/SharedIntlData.h"
 #include "ds/Sort.h"
@@ -329,6 +327,24 @@ static bool EnumerationIntoList(JSContext* cx, auto values,
 }
 
 /**
+ * Create an array from an intl::ICU4XEnumeration.
+ */
+static bool ICU4XEnumerationIntoList(JSContext* cx, auto& values,
+                                     MutableHandle<StringList> list) {
+  for (mozilla::Span<const char> value : values) {
+    auto* string = NewStringCopy<CanGC>(cx, value);
+    if (!string) {
+      return false;
+    }
+    if (!list.append(string)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Returns the list of calendar types which mustn't be returned by
  * |Intl.supportedValuesOf()|.
  */
@@ -367,38 +383,15 @@ static ArrayObject* AvailableCalendars(JSContext* cx) {
 }
 
 /**
- * Returns the list of collation types which mustn't be returned by
- * |Intl.supportedValuesOf()|.
- */
-static constexpr auto UnsupportedCollations() {
-  return std::array{
-      "search",
-      "standard",
-  };
-}
-
-/**
  * AvailableCollations ( )
  */
 static ArrayObject* AvailableCollations(JSContext* cx) {
   Rooted<StringList> list(cx, StringList(cx));
 
-  {
-    // Hazard analysis complains that the mozilla::Result destructor calls a
-    // GC function, which is unsound when returning an unrooted value. Work
-    // around this issue by restricting the lifetime of |keywords| to a
-    // separate block.
-    auto keywords = mozilla::intl::Collator::GetBcp47KeywordValues();
-    if (keywords.isErr()) {
-      ReportInternalError(cx, keywords.unwrapErr());
-      return nullptr;
-    }
+  auto keywords = mozilla::intl::Collator::GetBcp47KeywordValues();
 
-    static constexpr auto unsupported = UnsupportedCollations();
-
-    if (!EnumerationIntoList<unsupported>(cx, keywords.unwrap(), &list)) {
-      return nullptr;
-    }
+  if (!ICU4XEnumerationIntoList(cx, keywords, &list)) {
+    return nullptr;
   }
 
   return CreateArrayFromList(cx, &list);
@@ -487,8 +480,7 @@ static ArrayObject* AvailableTimeZones(JSContext* cx) {
 }
 
 template <size_t N>
-constexpr auto MeasurementUnitNames(
-    const mozilla::intl::SimpleMeasureUnit (&units)[N]) {
+constexpr auto MeasurementUnitNames(const SimpleMeasureUnit (&units)[N]) {
   std::array<const char*, N> array = {};
   for (size_t i = 0; i < N; ++i) {
     array[i] = units[i].name;
@@ -501,7 +493,7 @@ constexpr auto MeasurementUnitNames(
  */
 static ArrayObject* AvailableUnits(JSContext* cx) {
   static constexpr auto simpleMeasureUnitNames =
-      MeasurementUnitNames(mozilla::intl::simpleMeasureUnits);
+      MeasurementUnitNames(simpleMeasureUnits);
 
   return CreateArrayFromSortedList(cx, simpleMeasureUnitNames);
 }

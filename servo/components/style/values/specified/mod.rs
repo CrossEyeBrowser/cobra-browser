@@ -26,8 +26,7 @@ use std::fmt::{self, Write};
 use std::ops::Add;
 use style_traits::values::specified::AllowedNumericType;
 use style_traits::{
-    CssWriter, MathSum, NumericValue, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss,
-    ToTyped, TypedValue,
+    CssWriter, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss, ToTyped, TypedValue,
 };
 use thin_vec::ThinVec;
 
@@ -86,22 +85,12 @@ pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::page::{PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize};
 pub use self::percentage::{NonNegativePercentage, Percentage};
-pub use self::position::AnchorFunction;
-pub use self::position::AnchorName;
-pub use self::position::AnchorNameIdent;
-pub use self::position::AspectRatio;
-pub use self::position::Inset;
-pub use self::position::PositionAnchor;
-pub use self::position::PositionAnchorKeyword;
-pub use self::position::PositionTryFallbacks;
-pub use self::position::PositionTryOrder;
-pub use self::position::PositionVisibility;
-pub use self::position::ScopedName;
-pub use self::position::ScopedNameKeyword;
-pub use self::position::{GridAutoFlow, GridTemplateAreas, Position, PositionOrAuto};
-pub use self::position::{MasonryAutoFlow, MasonryItemOrder, MasonryPlacement};
-pub use self::position::{PositionArea, PositionAreaKeyword};
-pub use self::position::{PositionComponent, ZIndex};
+pub use self::position::{
+    AnchorFunction, AnchorName, AnchorNameIdent, AspectRatio, GridAutoFlow, GridTemplateAreas,
+    Inset, MasonryAutoFlow, MasonryItemOrder, MasonryPlacement, Position, PositionAnchor,
+    PositionAnchorKeyword, PositionArea, PositionAreaKeyword, PositionComponent, PositionOrAuto,
+    PositionTryFallbacks, PositionTryOrder, PositionVisibility, ScopedName, ZIndex,
+};
 pub use self::ratio::Ratio;
 pub use self::rect::NonNegativeLengthOrNumberRect;
 pub use self::resolution::Resolution;
@@ -382,17 +371,8 @@ impl ToCss for Number {
 }
 
 impl ToTyped for Number {
-    fn to_typed(&self) -> Option<TypedValue> {
-        let numeric_value = reify_number(self.value);
-
-        // https://drafts.css-houdini.org/css-typed-om-1/#reify-a-math-expression
-        if self.calc_clamping_mode.is_some() {
-            Some(TypedValue::Numeric(NumericValue::Sum(MathSum {
-                values: ThinVec::from([numeric_value]),
-            })))
-        } else {
-            Some(TypedValue::Numeric(numeric_value))
-        }
+    fn to_typed(&self, dest: &mut ThinVec<TypedValue>) -> Result<(), ()> {
+        reify_number(self.value, self.calc_clamping_mode.is_some(), dest)
     }
 }
 

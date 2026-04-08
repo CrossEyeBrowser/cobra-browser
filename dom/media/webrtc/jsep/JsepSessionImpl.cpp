@@ -808,8 +808,13 @@ JsepSession::Result JsepSessionImpl::SetLocalDescription(
 
   UniquePtr<Sdp> parsed;
   nsresult rv = ParseSdp(sdp, &parsed);
-  // Needs to be RTCError with sdp-syntax-error
-  NS_ENSURE_SUCCESS(rv, dom::PCError::OperationError);
+  if (NS_FAILED(rv)) {
+    Maybe<size_t> lineNumber;
+    if (!mLastSdpParsingErrors.empty()) {
+      lineNumber = Some(mLastSdpParsingErrors[0].first);
+    }
+    return Result(dom::PCError::OperationError, "sdp-syntax-error", lineNumber);
+  }
 
   // Check that content hasn't done anything unsupported with the SDP
   rv = ValidateLocalDescription(*parsed, type);
@@ -1011,8 +1016,13 @@ JsepSession::Result JsepSessionImpl::SetRemoteDescription(
   // Parse.
   UniquePtr<Sdp> parsed;
   nsresult rv = ParseSdp(sdp, &parsed);
-  // Needs to be RTCError with sdp-syntax-error
-  NS_ENSURE_SUCCESS(rv, dom::PCError::OperationError);
+  if (NS_FAILED(rv)) {
+    Maybe<size_t> lineNumber;
+    if (!mLastSdpParsingErrors.empty()) {
+      lineNumber = Some(mLastSdpParsingErrors[0].first);
+    }
+    return Result(dom::PCError::OperationError, "sdp-syntax-error", lineNumber);
+  }
 
   rv = ValidateRemoteDescription(*parsed);
   NS_ENSURE_SUCCESS(rv, dom::PCError::InvalidAccessError);
@@ -1109,7 +1119,12 @@ nsresult JsepSessionImpl::HandleNegotiatedSession(
   bool remoteIceLite =
       remote->GetAttributeList().HasAttribute(SdpAttribute::kIceLiteAttribute);
 
-  mIceControlling = remoteIceLite || *mIsPendingOfferer;
+  // RFC 8445 Section 9: roles persist for the session lifetime. Only set on
+  // first negotiation, or force controlling if remote switched to ICE-lite.
+  mIceControlling |= remoteIceLite;
+  if (!mNegotiations) {
+    mIceControlling |= *mIsPendingOfferer;
+  }
 
   const Sdp& answer = *mIsPendingOfferer ? *remote : *local;
 

@@ -34,9 +34,7 @@ function testValues(values, expected) {
   return true;
 }
 
-const CSS_WIDE_KEYWORDS = [
-  "initial", "inherit", "unset", "revert", "revert-layer", "revert-rule"
-];
+const CSS_WIDE_KEYWORDS = InspectorUtils.getCSSWideKeywords();
 
 function do_test() {
   var allColors = [
@@ -92,10 +90,6 @@ function do_test() {
 
   if(SpecialPowers.getBoolPref("layout.css.cross-fade.enabled")) {
     expected.push("cross-fade");
-  }
-
-  if(SpecialPowers.getBoolPref("layout.css.light-dark.images.enabled")) {
-    expected.push("light-dark");
   }
 
   ok(testValues(values, expected), "property background values.");

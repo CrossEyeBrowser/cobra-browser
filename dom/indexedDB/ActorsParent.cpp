@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -13,7 +11,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <functional>
 #include <iterator>
 #include <new>
 #include <numeric>
@@ -1629,12 +1626,11 @@ struct ConnectionPool::DatabaseInfo final {
   }
 
   nsresult Dispatch(already_AddRefed<nsIRunnable> aRunnable);
+  DatabaseInfo(const DatabaseInfo&) = delete;
+  DatabaseInfo& operator=(const DatabaseInfo&) = delete;
 
  private:
   ~DatabaseInfo();
-
-  DatabaseInfo(const DatabaseInfo&) = delete;
-  DatabaseInfo& operator=(const DatabaseInfo&) = delete;
 };
 
 struct ConnectionPool::DatabaseCompleteCallback final {
@@ -4451,9 +4447,6 @@ class Cursor final
   void SendResponseInternal(CursorResponse& aResponse,
                             const FilesArrayT<CursorType>& aFiles);
 
-  // Must call SendResponseInternal!
-  bool SendResponse(const CursorResponse& aResponse) = delete;
-
   // IPDL methods.
   void ActorDestroy(ActorDestroyReason aWhy) override;
 
@@ -4480,6 +4473,9 @@ class Cursor final
       : Base{std::move(aTransaction), std::move(aObjectStoreMetadata),
              aDirection, aConstructionTag},
         KeyValueBase{this->mTransaction.unsafeGetRawPtr()} {}
+
+  // Must call SendResponseInternal!
+  bool SendResponse(const CursorResponse& aResponse) = delete;
 
  private:
   void SetOptionalKeyRange(const Maybe<SerializedKeyRange>& aOptionalKeyRange,
@@ -5447,18 +5443,16 @@ class EncryptedFileBlobImpl final : public FileBlobImpl {
     SetFileId(aId);
   }
 
+  // The size of the blob is stored in the metadata where EncryptedFileBlobImpl
+  // is used, allowing a child process to set the size lazily. Therefore, the
+  // parent process is allowed to return a dummy value to avoid sync I/O. In a
+  // child process, the size should already be set beforehand and GetSize should
+  // only accesses it. And the reason why 0 is returned, even when the size is
+  // not set in a child process, is is because the spec doesn't allow Blob.size
+  // to throw.
   uint64_t GetSize(ErrorResult& aRv) override {
-    nsCOMPtr<nsIInputStream> inputStream;
-    CreateInputStream(getter_AddRefs(inputStream), aRv);
-
-    if (aRv.Failed()) {
-      return 0;
-    }
-
-    MOZ_ASSERT(inputStream);
-
-    QM_TRY_RETURN(MOZ_TO_RESULT_INVOKE_MEMBER(inputStream, Available), 0,
-                  [&aRv](const nsresult rv) { aRv = rv; });
+    MOZ_DIAGNOSTIC_ASSERT(XRE_IsParentProcess() || mLength.isSome());
+    return mLength.valueOr(0);
   }
 
   void CreateInputStream(nsIInputStream** aInputStream,
@@ -7614,6 +7608,15 @@ void DatabaseConnection::UpdateRefcountFunction::ReleaseSavepoint() {
   MOZ_ASSERT(mConnection);
   mConnection->AssertIsOnConnectionThread();
   MOZ_ASSERT(mInSavepoint);
+
+  // The savepoint is being committed. The deltas it contributed are now
+  // permanent in mDelta, so reset mSavepointDelta on each entry before
+  // dropping the index. The FileInfoEntry objects themselves persist in
+  // mFileInfoEntries across savepoints; without this reset, a stale
+  // mSavepointDelta would be carried into the next savepoint.
+  for (const auto& entry : mSavepointEntriesIndex.Values()) {
+    entry->ResetSavepointDelta();
+  }
 
   mSavepointEntriesIndex.Clear();
   mInSavepoint = false;
@@ -10407,6 +10410,13 @@ bool TransactionBase::VerifyRequestParams(
     switch (fileAddInfo.type()) {
       case StructuredCloneFileBase::eBlob:
         if (NS_AUUF_OR_WARN_IF(!file)) {
+          return false;
+        }
+
+        // Reject actors managed by a different Database
+        if (NS_AUUF_OR_WARN_IF(file->Manager() !=
+                               static_cast<const PBackgroundIDBDatabaseParent*>(
+                                   &GetDatabase()))) {
           return false;
         }
         break;
@@ -18900,6 +18910,14 @@ void NormalTransactionOp::ActorDestroy(ActorDestroyReason aWhy) {
 mozilla::ipc::IPCResult NormalTransactionOp::RecvContinue(
     const PreprocessResponse& aResponse) {
   AssertIsOnOwningThread();
+
+  // mWaitingForContinue is only touched on the owning thread. If it is not
+  // set, either we never sent Preprocess (child is misbehaving) or the op is
+  // still running on the connection thread. Calling NoteContinueReceived()
+  // in either case would race Cleanup() with DoDatabaseWork().
+  if (NS_WARN_IF(!IsWaitingForContinue())) {
+    return IPC_FAIL(this, "Continue received when not waiting for continue");
+  }
 
   switch (aResponse.type()) {
     case PreprocessResponse::Tnsresult:

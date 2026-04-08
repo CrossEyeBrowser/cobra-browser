@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -254,7 +252,8 @@ class RequestingAccessKeyEventData {
   static int32_t sBrowserParentCount;
 };
 int32_t RequestingAccessKeyEventData::sBrowserParentCount = 0;
-Maybe<RequestingAccessKeyEventData::Data> RequestingAccessKeyEventData::sData;
+constinit Maybe<RequestingAccessKeyEventData::Data>
+    RequestingAccessKeyEventData::sData;
 
 namespace dom {
 
@@ -582,7 +581,7 @@ ParentShowInfo BrowserParent::GetShowInfo() {
     mFrameElement->GetAttr(nsGkAtoms::name, name);
   }
   return ParentShowInfo(name, false, IsTransparent(), mDPI, mRounding,
-                        mDefaultScale.scale);
+                        mDefaultScale.scale, mDesktopToDeviceScale.scale);
 }
 
 already_AddRefed<nsIPrincipal> BrowserParent::GetContentPrincipal() const {
@@ -2786,7 +2785,10 @@ mozilla::ipc::IPCResult BrowserParent::RecvReplyKeyEvent(
             NS_WARN_IF(data.mPseudoCharCode != aEvent.mPseudoCharCode) ||
             NS_WARN_IF(data.mKeyNameIndex != aEvent.mKeyNameIndex) ||
             NS_WARN_IF(data.mCodeNameIndex != aEvent.mCodeNameIndex) ||
-            NS_WARN_IF(data.mModifiers != aEvent.mModifiers)) {
+            NS_WARN_IF(data.mModifiers != aEvent.mModifiers) ||
+            // The child process should've already cleared the editor commands
+            // because we don't use them.
+            NS_WARN_IF(aEvent.HasEditCommands())) {
           // Got different event data from what we stored before dispatching an
           // event with the ID.
           return Nothing();
@@ -2992,11 +2994,6 @@ mozilla::ipc::IPCResult BrowserParent::RecvOnLocationChange(
   browsingContext->SetCurrentRemoteURI(aLocation);
 
   nsCOMPtr<nsIBrowser> browser = GetBrowser();
-  if (!mozilla::SessionHistoryInParent() && browser) {
-    (void)browser->UpdateWebNavigationForLocationChange(
-        aCanGoBack, aCanGoBackIgnoringUserInteraction, aCanGoForward);
-  }
-
   if (aLocationChangeData.isSome()) {
     if (!browsingContext->IsTopContent()) {
       return IPC_FAIL(this,
@@ -3368,6 +3365,15 @@ void BrowserParent::UpdateFocusFromBrowsingContext() {
   }
 }
 
+mozilla::ipc::IPCResult BrowserParent::RecvPerformHapticFeedback(
+    mozilla::HapticFeedbackType aType) {
+  nsCOMPtr<nsIWidget> widget = GetTopLevelWidget();
+  if (widget) {
+    widget->PerformHapticFeedback(aType);
+  }
+  return IPC_OK();
+}
+
 /* static */
 BrowserParent* BrowserParent::UpdateFocus() {
   if (!sTopLevelWebFocus) {
@@ -3555,6 +3561,8 @@ void BrowserParent::TryCacheDPIAndScale() {
   mRounding = widget ? widget->RoundsWidgetCoordinatesTo() : 1;
   mDefaultScale =
       widget ? widget->GetDefaultScale() : nsIWidget::GetFallbackDefaultScale();
+  mDesktopToDeviceScale = widget ? widget->GetDesktopToDeviceScale()
+                                 : DesktopToLayoutDeviceScale(1.0);
 
   if (mDefaultScale != oldDefaultScale) {
     // The change of the default scale factor will affect the child dimensions
@@ -3700,7 +3708,8 @@ void BrowserParent::NotifyResolutionChanged() {
   // We don't want to send that value to content. Just send -1 for it too in
   // that case.
   (void)SendUIResolutionChanged(mDPI, mRounding,
-                                mDPI < 0 ? -1.0 : mDefaultScale.scale);
+                                mDPI < 0 ? -1.0 : mDefaultScale.scale,
+                                mDesktopToDeviceScale.scale);
 }
 
 void BrowserParent::NotifyTransparencyChanged() {
@@ -3714,12 +3723,6 @@ bool BrowserParent::CanCancelContentJS(
     nsIURI* aNavigationURI) const {
   // Pre-checking if we can cancel content js in the parent is only
   // supported when session history in the parent is enabled.
-  if (!mozilla::SessionHistoryInParent()) {
-    // If session history in the parent isn't enabled, this check will
-    // be fully done in BrowserChild::CanCancelContentJS
-    return true;
-  }
-
   nsCOMPtr<nsISHistory> history = mBrowsingContext->GetSessionHistory();
 
   if (!history) {

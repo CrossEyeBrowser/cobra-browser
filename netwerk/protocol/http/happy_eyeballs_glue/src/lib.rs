@@ -4,6 +4,9 @@
 
 //! FFI glue layer between happy-eyeballs Rust crate and Firefox's C++ networking stack.
 
+mod metrics;
+mod profiler;
+
 use nserror::{nsresult, NS_ERROR_INVALID_ARG, NS_ERROR_UNEXPECTED, NS_OK};
 use nsstring::{nsACString, nsCString};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -17,12 +20,28 @@ use libc::{AF_INET, AF_INET6};
 #[cfg(windows)]
 use winapi::shared::ws2def::{AF_INET, AF_INET6};
 
+#[repr(C)]
+pub enum IpPreference {
+    DualStackPreferV6 = 0,
+    DualStackPreferV4 = 1,
+}
+
+impl From<IpPreference> for happy_eyeballs::IpPreference {
+    fn from(v: IpPreference) -> Self {
+        match v {
+            IpPreference::DualStackPreferV6 => Self::DualStackPreferV6,
+            IpPreference::DualStackPreferV4 => Self::DualStackPreferV4,
+        }
+    }
+}
+
 #[no_mangle]
-pub extern "C" fn create(
+pub extern "C" fn happy_eyeballs_create(
     result: &mut *const HappyEyeballs,
     origin: *const nsACString,
     port: u16,
     alt_svc: *const ThinVec<AltSvc>,
+    ip_preference: IpPreference,
 ) -> nsresult {
     *result = ptr::null_mut();
 
@@ -42,35 +61,46 @@ pub extern "C" fn create(
         .iter()
         .map(|a| happy_eyeballs::AltSvc {
             host: None,
-            port: None,
-            protocol: a.protocol.into(),
+            port: if a.port != 0 { Some(a.port) } else { None },
+            http_version: a.http_version.into(),
         })
         .collect();
 
     let network_config = happy_eyeballs::NetworkConfig {
         alt_svc: alt_svc_vec,
+        ip: ip_preference.into(),
         ..Default::default()
     };
+
+    let profiler = profiler::Profiler::new(0u64.into(), &origin_str, &network_config);
 
     let raw_ptr = match happy_eyeballs::HappyEyeballs::new_with_network_config(
         origin_str.as_str(),
         port,
         network_config,
     ) {
-        Ok(he) => Box::into_raw(Box::new(HappyEyeballs {
-            refcnt: unsafe { AtomicRefcnt::new() },
-            inner: he,
-        })),
+        Ok(he) => {
+            let mut boxed = Box::new(HappyEyeballs {
+                refcnt: unsafe { AtomicRefcnt::new() },
+                inner: he,
+                profiler,
+                metrics: metrics::Metrics::new(),
+            });
+            boxed
+                .profiler
+                .set_flow_id(std::ptr::from_ref(&boxed.refcnt).into());
+            Box::into_raw(boxed)
+        }
         Err(_) => return NS_ERROR_UNEXPECTED,
     };
 
-    unsafe { addref(raw_ptr as *const _) };
+    unsafe { happy_eyeballs_addref(raw_ptr as *const _) };
     *result = raw_ptr;
     NS_OK
 }
 
 #[no_mangle]
-pub extern "C" fn process_dns_response_a(
+pub extern "C" fn happy_eyeballs_process_dns_response_a(
     he: *mut HappyEyeballs,
     id: u64,
     addrs: *const ThinVec<NetAddr>,
@@ -89,7 +119,7 @@ pub extern "C" fn process_dns_response_a(
 }
 
 #[no_mangle]
-pub extern "C" fn process_dns_response_aaaa(
+pub extern "C" fn happy_eyeballs_process_dns_response_aaaa(
     he: *mut HappyEyeballs,
     id: u64,
     addrs: *const ThinVec<NetAddr>,
@@ -108,7 +138,7 @@ pub extern "C" fn process_dns_response_aaaa(
 }
 
 #[no_mangle]
-pub extern "C" fn process_dns_response_https(
+pub extern "C" fn happy_eyeballs_process_dns_response_https(
     he: *mut HappyEyeballs,
     id: u64,
     service_infos: *const ThinVec<ServiceInfo>,
@@ -127,7 +157,7 @@ pub extern "C" fn process_dns_response_https(
 }
 
 #[no_mangle]
-pub extern "C" fn process_connection_result(
+pub extern "C" fn happy_eyeballs_process_connection_result(
     he: *mut HappyEyeballs,
     id: u64,
     status: nsresult,
@@ -141,10 +171,11 @@ pub extern "C" fn process_connection_result(
 }
 
 #[no_mangle]
-pub extern "C" fn process_output(
+pub extern "C" fn happy_eyeballs_process_output(
     he: *mut HappyEyeballs,
     ret_event: *mut Output,
     ech_config: *mut ThinVec<u8>,
+    dns_hostname: *mut nsACString,
 ) -> nsresult {
     let Some(he) = (unsafe { he.as_mut() }) else {
         debug_assert!(false, "unexpected null he pointer");
@@ -161,17 +192,25 @@ pub extern "C" fn process_output(
         return NS_ERROR_INVALID_ARG;
     };
 
-    he.process_output(ret_event, ech_config)
+    let Some(dns_hostname) = (unsafe { dns_hostname.as_mut() }) else {
+        debug_assert!(false, "unexpected null dns_hostname pointer");
+        return NS_ERROR_INVALID_ARG;
+    };
+
+    he.process_output(ret_event, ech_config, dns_hostname)
 }
 
 #[repr(C)]
 pub struct HappyEyeballs {
     refcnt: AtomicRefcnt,
     inner: happy_eyeballs::HappyEyeballs,
+    profiler: profiler::Profiler,
+    metrics: metrics::Metrics,
 }
 
 impl HappyEyeballs {
     fn process_dns_response_a(&mut self, id: u64, net_addrs: &ThinVec<NetAddr>) -> nsresult {
+        let id: happy_eyeballs::Id = id.into();
         let mut addrs = Vec::with_capacity(net_addrs.len());
         for na in net_addrs.iter() {
             let family =
@@ -185,17 +224,18 @@ impl HappyEyeballs {
             addrs.push(ipv4);
         }
 
+        self.profiler.dns_response(id, &addrs);
+        self.metrics.dns_response(id);
+
         let result = happy_eyeballs::DnsResult::A(Ok(addrs));
-        let input = happy_eyeballs::Input::DnsResult {
-            id: id.into(),
-            result,
-        };
+        let input = happy_eyeballs::Input::DnsResult { id, result };
         self.inner.process_input(input, Instant::now());
 
         NS_OK
     }
 
     fn process_dns_response_aaaa(&mut self, id: u64, net_addrs: &ThinVec<NetAddr>) -> nsresult {
+        let id: happy_eyeballs::Id = id.into();
         let mut addrs = Vec::with_capacity(net_addrs.len());
         for na in net_addrs.iter() {
             let family =
@@ -210,11 +250,11 @@ impl HappyEyeballs {
             addrs.push(ipv6);
         }
 
+        self.profiler.dns_response(id, &addrs);
+        self.metrics.dns_response(id);
+
         let result = happy_eyeballs::DnsResult::Aaaa(Ok(addrs));
-        let input = happy_eyeballs::Input::DnsResult {
-            id: id.into(),
-            result,
-        };
+        let input = happy_eyeballs::Input::DnsResult { id, result };
         self.inner.process_input(input, Instant::now());
 
         NS_OK
@@ -225,6 +265,7 @@ impl HappyEyeballs {
         id: u64,
         service_infos: &ThinVec<ServiceInfo>,
     ) -> nsresult {
+        let id: happy_eyeballs::Id = id.into();
         let mut infos = Vec::new();
 
         for svc_info in service_infos {
@@ -236,14 +277,14 @@ impl HappyEyeballs {
             };
 
             let mut alpn_set = std::collections::HashSet::new();
-            for protocol in &svc_info.alpn_protocols {
-                alpn_set.insert((*protocol).into());
+            for http_version in &svc_info.alpn_http_versions {
+                alpn_set.insert((*http_version).into());
             }
 
             let ech = if svc_info.ech_config.is_empty() {
                 None
             } else {
-                Some(svc_info.ech_config.to_vec())
+                Some(happy_eyeballs::EchConfig::new(svc_info.ech_config.to_vec()))
             };
 
             let mut ipv4_vec = Vec::new();
@@ -284,7 +325,7 @@ impl HappyEyeballs {
             infos.push(happy_eyeballs::ServiceInfo {
                 priority: svc_info.priority,
                 target_name: target,
-                alpn_protocols: alpn_set,
+                alpn_http_versions: alpn_set,
                 ech_config: ech,
                 ipv4_hints: ipv4_vec,
                 ipv6_hints: ipv6_vec,
@@ -292,73 +333,98 @@ impl HappyEyeballs {
             });
         }
 
+        self.profiler.dns_response_https(id, &infos);
+        self.metrics.dns_response_https(id, !infos.is_empty());
+
         let result = happy_eyeballs::DnsResult::Https(Ok(infos));
-        let input = happy_eyeballs::Input::DnsResult {
-            id: id.into(),
-            result,
-        };
+        let input = happy_eyeballs::Input::DnsResult { id, result };
         self.inner.process_input(input, Instant::now());
 
         NS_OK
     }
 
     fn process_connection_result(&mut self, id: u64, status: nsresult) -> nsresult {
+        let id: happy_eyeballs::Id = id.into();
+        self.profiler.connection_result(id, status == NS_OK);
+        if status == NS_OK {
+            self.metrics.connection_succeeded(id);
+        }
+
         let result = if status == NS_OK {
-            Ok(())
+            happy_eyeballs::ConnectionResult::Success
         } else {
-            Err(format!("connection failed: 0x{:08x}", status.0))
+            happy_eyeballs::ConnectionResult::Failure(format!(
+                "connection failed: 0x{:08x}",
+                status.0
+            ))
         };
 
-        let input = happy_eyeballs::Input::ConnectionResult {
-            id: id.into(),
-            result,
-        };
+        let input = happy_eyeballs::Input::ConnectionResult { id, result };
         self.inner.process_input(input, Instant::now());
 
         NS_OK
     }
 
-    fn process_output(&mut self, ret_event: &mut Output, ech_config: &mut ThinVec<u8>) -> nsresult {
+    fn process_output(
+        &mut self,
+        ret_event: &mut Output,
+        ech_config: &mut ThinVec<u8>,
+        dns_hostname: &mut nsACString,
+    ) -> nsresult {
         let out = self.inner.process_output(std::time::Instant::now());
         ech_config.clear();
+        dns_hostname.truncate();
         match out {
             Some(happy_eyeballs::Output::SendDnsQuery {
                 id,
-                hostname: _hostname,
+                hostname,
                 record_type,
             }) => {
+                self.profiler.dns_query_started(id, record_type);
+                self.metrics.dns_query_started(id, record_type);
+                let hostname: String = hostname.into();
+                dns_hostname.assign(hostname.as_bytes());
                 *ret_event = Output::SendDnsQuery {
                     id: id.into(),
                     record_type: record_type.into(),
                 };
             }
             Some(happy_eyeballs::Output::Timer { duration, .. }) => {
-                *ret_event = Output::Timer {
-                    duration_ms: duration.as_millis().try_into().unwrap_or_else(|_| {
+                let duration_ms = match duration.as_millis() {
+                    0 => 1,
+                    ms => ms.try_into().unwrap_or_else(|_| {
                         debug_assert!(false, "duration > u64::MAX");
                         u64::MAX
                     }),
                 };
+                *ret_event = Output::Timer { duration_ms };
             }
             Some(happy_eyeballs::Output::AttemptConnection { id, endpoint }) => {
+                self.profiler.connection_attempt_started(id, &endpoint);
+                self.metrics.connection_attempt_started(id);
                 if let Some(ref ech) = endpoint.ech_config {
-                    ech_config.extend_from_slice(ech);
+                    ech_config.extend_from_slice(ech.as_ref());
                 }
                 *ret_event = Output::AttemptConnection {
                     id: id.into(),
-                    protocol: endpoint.protocol.into(),
+                    http_version: endpoint.http_version.into(),
                     addr: endpoint.address.ip().into(),
                     port: endpoint.address.port(),
                 };
             }
             Some(happy_eyeballs::Output::CancelConnection { id }) => {
+                self.profiler.connection_cancelled(id);
+                self.metrics.connection_cancelled(id);
                 *ret_event = Output::CancelConnection { id: id.into() };
             }
             Some(happy_eyeballs::Output::Succeeded) => {
                 *ret_event = Output::Succeeded;
             }
-            Some(happy_eyeballs::Output::Failed) => {
-                *ret_event = Output::Failed;
+            Some(happy_eyeballs::Output::Failed(reason)) => {
+                self.metrics.failed();
+                *ret_event = Output::Failed {
+                    reason: reason.into(),
+                };
             }
             None => {
                 *ret_event = Output::None;
@@ -369,10 +435,11 @@ impl HappyEyeballs {
     }
 }
 
-// TODO: Expose ip and port.
+// TODO: Expose host.
 #[repr(C)]
 pub struct AltSvc {
-    pub protocol: HttpVersion,
+    pub http_version: HttpVersion,
+    pub port: u16,
 }
 
 #[repr(C)]
@@ -460,12 +527,21 @@ impl From<happy_eyeballs::HttpVersion> for ConnectionAttemptHttpVersions {
     }
 }
 
+impl From<happy_eyeballs::FailureReason> for FailureReason {
+    fn from(v: happy_eyeballs::FailureReason) -> Self {
+        match v {
+            happy_eyeballs::FailureReason::DnsResolution => Self::DnsResolution,
+            happy_eyeballs::FailureReason::Connection => Self::Connection,
+        }
+    }
+}
+
 #[repr(C)]
 pub struct ServiceInfo {
     pub priority: u16,
     pub port: u16,
     pub target_name: nsCString,
-    pub alpn_protocols: ThinVec<HttpVersion>,
+    pub alpn_http_versions: ThinVec<HttpVersion>,
     pub ech_config: ThinVec<u8>,
     pub ipv4_hints: ThinVec<NetAddr>,
     pub ipv6_hints: ThinVec<NetAddr>,
@@ -487,6 +563,12 @@ impl From<std::net::IpAddr> for IpAddr {
 }
 
 #[repr(C)]
+pub enum FailureReason {
+    DnsResolution = 0,
+    Connection = 1,
+}
+
+#[repr(C)]
 pub enum Output {
     SendDnsQuery {
         id: u64,
@@ -497,7 +579,7 @@ pub enum Output {
     },
     AttemptConnection {
         id: u64,
-        protocol: ConnectionAttemptHttpVersions,
+        http_version: ConnectionAttemptHttpVersions,
         addr: IpAddr,
         port: u16,
     },
@@ -505,12 +587,15 @@ pub enum Output {
         id: u64,
     },
     Succeeded,
-    Failed,
+    Failed {
+        reason: FailureReason,
+    },
     None,
 }
 
+
 #[no_mangle]
-pub unsafe extern "C" fn release(happy_eyeballs: *const HappyEyeballs) {
+pub unsafe extern "C" fn happy_eyeballs_release(happy_eyeballs: *const HappyEyeballs) {
     let Some(happy_eyeballs) = (unsafe { happy_eyeballs.as_ref() }) else {
         debug_assert!(false, "unexpected null happy_eyeballs pointer");
         return;
@@ -523,7 +608,7 @@ pub unsafe extern "C" fn release(happy_eyeballs: *const HappyEyeballs) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn addref(happy_eyeballs: *const HappyEyeballs) {
+pub unsafe extern "C" fn happy_eyeballs_addref(happy_eyeballs: *const HappyEyeballs) {
     let Some(happy_eyeballs) = (unsafe { happy_eyeballs.as_ref() }) else {
         debug_assert!(false, "unexpected null happy_eyeballs pointer");
         return;
@@ -535,10 +620,10 @@ pub unsafe extern "C" fn addref(happy_eyeballs: *const HappyEyeballs) {
 // xpcom::RefPtr support
 unsafe impl RefCounted for HappyEyeballs {
     unsafe fn addref(&self) {
-        addref(self);
+        happy_eyeballs_addref(self);
     }
     unsafe fn release(&self) {
-        release(self);
+        happy_eyeballs_release(self);
     }
 }
 

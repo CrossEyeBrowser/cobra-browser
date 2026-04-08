@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set sw=2 ts=8 et tw=80 : */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -176,6 +174,11 @@ class nsHttpConnectionInfo final : public ARefBase {
   }
   bool GetAnonymous() const {
     return GetHashCharAt(HashKeyIndex::Anonymous) == 'A';
+  }
+  void AnonymousInvertedHashKey(nsACString& aResult) const {
+    aResult = mHashKey;
+    aResult.BeginWriting()[UnderlyingIndex(HashKeyIndex::Anonymous)] =
+        GetAnonymous() ? '.' : 'A';
   }
   void SetPrivate(bool priv) {
     SetHashCharAt(priv ? 'P' : '.', HashKeyIndex::Private);

@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -146,7 +144,16 @@
     /* flag predicate     */ true,                                      \
     /* flag force enable  */ false,                                     \
     /* flag fuzz enable   */ true,                                      \
-    /* preference name    */ compact_imports)
+    /* preference name    */ compact_imports)                           \
+  FEATURE(                                                              \
+    /* capitalized name   */ WideArithmetic,                            \
+    /* lower case name    */ wideArithmetic,                            \
+    /* compile predicate  */ 1,                                         \
+    /* compiler predicate */ AnyCompilerAvailable(cx),                  \
+    /* flag predicate     */ true,                                      \
+    /* flag force enable  */ false,                                     \
+    /* flag fuzz enable   */ true,                                      \
+    /* preference name    */ wide_arithmetic)
 
 // clang-format on
 

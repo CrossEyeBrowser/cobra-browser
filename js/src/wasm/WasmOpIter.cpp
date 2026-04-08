@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2015 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -660,6 +658,12 @@ OpKind wasm::Classify(OpBytes op) {
           return OpKind::TableGrow;
         case MiscOp::TableSize:
           return OpKind::TableSize;
+        case MiscOp::I64Add128:
+        case MiscOp::I64Sub128:
+          return OpKind::BinaryI128;
+        case MiscOp::I64MulWideS:
+        case MiscOp::I64MulWideU:
+          return OpKind::BinaryI64Wide;
       }
       break;
     }

@@ -19,6 +19,8 @@
   <string name="content_description_menu">更多選項</string>
   <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
   <string name="content_description_private_browsing">隱私瀏覽模式</string>
+  <!-- Content description (not visible, for screen readers etc.): "Normal Browsing" menu button. -->
+  <string name="content_description_normal_browsing">一般瀏覽模式</string>
   <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
   <string name="search_hint">搜尋或輸入網址</string>
   <!-- Placeholder text shown in the search bar before a user enters text for a general engine -->
@@ -314,6 +316,8 @@
   <string name="browser_menu_edit_bookmark">編輯書籤</string>
   <!-- Browser menu label that the saves the currently visited page as a PDF -->
   <string name="browser_menu_save_as_pdf_2">儲存為 PDF</string>
+  <!-- Browser menu label for moving the current private tab to a non-private tab -->
+  <string name="browser_menu_move_to_non_private_tab">移動到非隱私保護分頁</string>
   <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
   <string name="browser_menu_translate_page_2">翻譯頁面</string>
   <!-- Browser menu label for navigating to the summarization feature, which provides site summarization for the current visited page -->
@@ -372,6 +376,8 @@
     %2$s is the name of the language which the page was translated to. (For example: French)
   -->
   <string name="browser_toolbar_translated_successfully">已將頁面從 %1$s 翻譯為 %2$s。</string>
+  <!-- CFR description for the browser toolbar describing the "Shake to summarize feature" -->
+  <string name="browser_toolbar_summarize_cfr_description">搖晃您的裝置，即可在幾秒內獲得頁面摘要內容。⚡️</string>
   <!--
     Translation Toolbar
 
@@ -614,8 +620,12 @@
 
   <!-- "Continue" onboarding button. -->
   <string name="nova_onboarding_continue_button">繼續</string>
+  <!-- "Continue browsing" onboarding button. -->
+  <string name="nova_onboarding_continue_browsing_button" tools:ignore="UnusedResources">繼續上網</string>
   <!-- "Not now" onboarding button. -->
   <string name="nova_onboarding_negative_button">現在不要</string>
+  <!-- "Skip" onboarding button. -->
+  <string name="nova_onboarding_skip_button" tools:ignore="UnusedResources">略過</string>
   <!-- Terms of use (ToU) onboarding title. -->
   <string name="nova_onboarding_tou_title" tools:ignore="UnusedResources">準備好自由奔跑</string>
   <!-- Terms of use (ToU) onboarding subtitle. -->
@@ -690,6 +700,25 @@
   <string name="nova_onboarding_add_search_widget_subtitle" tools:ignore="BrandUsage">每次都從手機主畫面開始搜尋，讓 Firefox 的自動保護功能全程挺你。</string>
   <!-- "Add search widget" onboarding button. 'Firefox' is intentionally hardcoded. -->
   <string name="nova_onboarding_add_search_widget_button" tools:ignore="BrandUsage">新增 Firefox 小工具</string>
+  <!-- Customize prompt onboarding title. -->
+  <string name="nova_onboarding_customize_prompt_title" tools:ignore="UnusedResources">輕鬆自訂，每次點擊都更有隱私</string>
+  <plurals name="nova_onboarding_customize_prompt_body" tools:ignore="UnusedResources">
+    <!--
+      Customize prompt onboarding body.
+      %1$s is replaced by the product name (for example "Firefox"),
+      %2$,d is replaced by the number of trackers blocked. The comma represents the thousand
+      separator (e.g. 1,000 in English), and it will automatically use the correct character
+      for your locale (don't change or remove it).
+    -->
+    <item quantity="one">在您上網時，%1$s 封鎖了 %2$,d 組追蹤器。</item>
+    <item quantity="other">在您上網時，%1$s 封鎖了 %2$,d 組追蹤器。</item>
+  </plurals>
+  <!-- Customize prompt onboarding positive button. -->
+  <string name="nova_onboarding_customize_prompt_positive_button" tools:ignore="UnusedResources">開始自訂</string>
+  <!-- App icon onboarding title. -->
+  <string name="nova_onboarding_app_icon_prompt_title" tools:ignore="UnusedResources">挑選自訂應用程式圖示</string>
+  <!-- App icon onboarding body. -->
+  <string name="nova_onboarding_app_icon_prompt_body" tools:ignore="UnusedResources">為您的主畫面加上個人風格。</string>
   <!-- ==== End of Project "Nova" onboarding strings ==== -->
 
   <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
@@ -757,6 +786,10 @@
   <string name="preferences_category_about">關於</string>
   <!-- Preference category for settings related to changing the default search engine -->
   <string name="preferences_category_select_default_search_engine">選擇一套</string>
+  <!-- Preference category for settings related to changing the private browsing search engine -->
+  <string name="preferences_category_select_private_search_engine">隱私瀏覽模式的預設搜尋引擎</string>
+  <!-- Option to set the private browsing mode to use the normal default search engine -->
+  <string name="search_engine_use_default">使用與一般瀏覽模式相同的搜尋引擎</string>
   <!-- Preference for settings related to managing search shortcuts for the quick search menu -->
   <string name="preferences_manage_search_shortcuts_2">管理其他搜尋引擎</string>
   <!-- Summary for preference for settings related to managing search shortcuts for the quick search menu -->
@@ -942,6 +975,8 @@
   <string name="preferences_show_nonsponsored_suggestions">來自 %1$s 的建議</string>
   <!-- Summary for preference to show Firefox Suggest search suggestions for web content -->
   <string name="preferences_show_nonsponsored_suggestions_summary">取得您搜尋內容的相關建議</string>
+  <!-- Preference title for switch preference to show search optimization cards -->
+  <string name="preferences_show_search_optimization_cards">一邊打字，一邊從 Mozilla 取得建議</string>
   <!-- Preference for link sharing -->
   <string name="preferences_link_sharing">鏈結分享</string>
   <!-- Title for the link sharing toggle. %1$s is replaced by the brand name (e.g. Firefox). -->
@@ -971,6 +1006,15 @@
   <string name="preference_downloads_folder_permission_lost" tools:ignore="UnusedResources">您沒有使用此資料夾的權限，請改選其他資料夾。</string>
   <!-- Preference title for choosing an app to handle downloads -->
   <string name="preferences_choose_app_for_downloads">使用另一套應用程式管理下載項目</string>
+  <!-- Preference category for deleting or removing downloads -->
+  <string name="preferences_category_delete_or_remove_downloads">刪除或移除下載項目</string>
+  <string name="preferences_downloads_delete_from_device">從裝置刪除</string>
+  <string name="preferences_downloads_delete_from_device_description">將從您的裝置刪除檔案，並從下載紀錄移除</string>
+  <string name="preferences_downloads_remove_from_download_history">從下載紀錄移除</string>
+  <string name="preferences_downloads_remove_from_download_history_description">會從您的下載紀錄移除檔案，但檔案本身仍會保留於裝置中</string>
+  <string name="preferences_downloads_ask_when_to_delete_files">刪除檔案前詢問我</string>
+  <!-- Preference for downloads -->
+  <string name="preferences_downloads_2">下載選項</string>
   <!-- Title for the setting to automatically clean up downloaded files. %s is the name of the app (for example "Firefox"). -->
   <string name="preferences_downloads_settings_clean_up_files_title">從 %s 與裝置刪除</string>
   <!-- Summary for the setting to automatically clean up downloaded files -->
@@ -1032,8 +1076,10 @@
   <!--
     Customize Home
 
-    Header text for jumping back into the recent tab in customize the home screen
+    Title for the customize home screen section with privacy report.
   -->
+  <string name="customize_toggle_privacy_report">隱私權報告</string>
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">回到先前開啟頁面</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">書籤</string>
@@ -1499,12 +1545,8 @@
   <string name="studies_remove">移除</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">進行中</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">在功能推出給所有人之前，搶先試用新功能與點子。</string>
   <!-- Description for studies. Note: The word "Firefox" should NOT be translated -->
   <string name="studies_description_4" tools:ignore="BrandUsage">Firefox 會隨機選擇使用者來測試功能，為每個人改進品質。</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">安裝並進行使用者研究</string>
   <!-- Title of the Studies data preference -->
   <string name="studies_title_2">允許進行功能研究</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
@@ -1592,6 +1634,8 @@
   <string name="tab_manager_multiselect_menu_item_share">分享</string>
   <!-- Text shown in the multiselect menu for adding selected tabs to collections. -->
   <string name="tab_manager_multiselect_menu_item_add_to_collection">新增至收藏集</string>
+  <!-- Text shown in the multiselect menu for adding selected tabs to a tab group. -->
+  <string name="tab_manager_multiselect_menu_item_add_to_tab_group">新增至群組</string>
   <!-- Content description for tabs tray multiselect share button -->
   <string name="tab_tray_multiselect_share_content_description" tools:ignore="UnusedResources" moz:removedIn="149">分享選擇的分頁</string>
   <!-- Content description for tabs tray multiselect menu -->
@@ -1638,12 +1682,42 @@
     Title for the create tab group bottom sheet
   -->
   <string name="create_tab_group_title">建立分頁群組</string>
+  <!-- Title for the edit tab group bottom sheet -->
+  <string name="edit_tab_group_title">編輯群組</string>
   <string name="create_tab_group_save_button">儲存</string>
   <string name="edit_tab_group_bottom_sheet_close_content_description">關閉編輯分頁群組</string>
   <!-- Default tab group name when creating a tab group -->
-  <string name="create_tab_group_default_name">群組</string>
-  <!-- Label for the tab group name field in the bottom sheet to create a new tab group. -->
+  <string name="create_tab_group_default_name" tools:ignore="UnusedResources" moz:removedIn="150">群組</string>
+  <!--
+    Default tab group name when creating a tab group
+    %d is the number of existing tab groups + 1.
+  -->
+  <string name="create_tab_group_form_default_name">群組 %d</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
   <string name="create_tab_group_name_label">名稱</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
+  <string name="tab_group_name_label" tools:ignore="UnusedResources" moz:removedIn="150">名稱</string>
+  <!-- Title for adding more tabs to a tab group. -->
+  <string name="add_to_tab_group_title">新增到</string>
+  <!-- Content Description for closing the "Add to Tab Group" panel. -->
+  <string name="add_to_tab_group_bottom_sheet_close_content_description">關閉「新增到分頁群組」</string>
+  <!-- Label for adding to a new tab group. -->
+  <string name="add_to_new_tab_group_title">新增分頁群組</string>
+  <plurals name="tab_group_tabs_count_subtitle">
+    <!--
+      Subtitle for the number of tabs in a tab group.
+      %1$d is the number of tabs in a tab group.
+    -->
+    <item quantity="other">%1$d 個分頁</item>
+  </plurals>
+  <!-- Title for the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_title">要刪除分頁群組嗎？</string>
+  <!-- Text shown in the body of the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_body">將永久刪除該群組。</string>
+  <!-- Text shown on the confirm button in the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_confirm">刪除群組</string>
+  <!-- Text shown on the cancel button in the Delete tab group confirmation dialog. -->
+  <string name="delete_tab_group_confirmation_dialog_cancel">取消</string>
   <!--
     History
 
@@ -1722,6 +1796,11 @@
     This button will dismiss the dialog.
   -->
   <string name="download_file_has_not_enough_storage_dialog_cancel_button_text">取消</string>
+  <plurals name="downloads_delete_dialog_title">
+    <!-- Title for the download deletion confirmation dialog. The message changes depending on how many files are selected. %d is the number of files to be deleted. -->
+    <item quantity="one">要刪除檔案嗎？</item>
+    <item quantity="other">要刪除 %d 個檔案嗎？</item>
+  </plurals>
   <!-- Text for the button to delete a single downloaded file item -->
   <string name="download_delete_item">刪除</string>
   <!-- Content description for the toolbar "Navigate back" button -->
@@ -1753,6 +1832,14 @@
   <string name="download_delete_multi_select_dialog_confirm">刪除</string>
   <!-- Alert dialog confirmation before deleting multiple download items, this is the negative action. -->
   <string name="download_delete_multi_select_dialog_cancel">取消</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is one of the radio buttons within the dialog box for the user to select. -->
+  <string name="download_delete_dialog_from_device">從裝置刪除</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is one of the radio buttons within the dialog box for the user to select. -->
+  <string name="download_delete_dialog_from_history">只從下載紀錄移除</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is the negative action. -->
+  <string name="download_delete_dialog_cancel">取消</string>
+  <!-- Alert dialog confirmation before deleting a single download item or many download items, this is the positive action. -->
+  <string name="download_delete_dialog_confirm">確認</string>
   <!-- Title for the alert dialog confirmation before renaming a download item. -->
   <string name="download_rename_dialog_title">重新命名檔案</string>
   <!-- Label for the name field in the alert dialog confirmation before renaming a download item. -->
@@ -1850,6 +1937,16 @@
   <string name="download_content_type_filter_document">文件</string>
   <!-- Text for the filter button to show all other file types in the downloads list -->
   <string name="download_content_type_filter_other_1">其他</string>
+  <!--
+    Title for the alert dialog to rename a file and/or change its download location before downloading it.
+    %s is the formatted size of the file (e.g., "12.5 MB").
+  -->
+  <string name="download_rename_and_change_location_dialog_title">要下載檔案嗎？\n（%s）</string>
+  <!--
+    Title for the alert dialog to rename a file and/or change its download location
+    when the file size is not available before downloading it.
+  -->
+  <string name="download_rename_and_change_location_dialog_title_with_unknown_size">要下載檔案嗎？</string>
   <!--
     WebCompat Reporter
 
@@ -1978,7 +2075,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">編輯</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">複製</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">複製</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">分享</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -2034,12 +2131,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">已刪除書籤 %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">還原</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">還原</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">已刪除 %s</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">已刪除 %s</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">已刪除 %s 個項目</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">已刪除 %s 個項目</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">瀏覽上一頁</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">新增資料夾</string>
@@ -2248,6 +2349,24 @@
   <string name="menu_print">列印</string>
   <!-- Sub-header in the dialog to share a link to another sync device -->
   <string name="share_device_subheader">傳送到裝置</string>
+  <!-- Content description for the drag handle that dismisses the Send to Device bottom sheet -->
+  <string name="send_to_devices_bottom_sheet_close_content_description">關閉傳送到裝置</string>
+  <!-- Text for the QR code action in the native share sheet -->
+  <string name="share_qr_code">QR Code</string>
+  <!-- Title shown in the QR code display screen -->
+  <string name="qr_code_display_title">QR Code</string>
+  <!-- Content description for the close button in the QR code display screen -->
+  <string name="qr_code_display_close">關閉</string>
+  <!-- Heading on the QR code display screen -->
+  <string name="qr_code_display_share_nearby">分享鏈結給附近的人</string>
+  <!-- Body text on the QR code display screen instructing the user to have others scan the code -->
+  <string name="qr_code_display_instructions">若要將此鏈結分享給附近的人，請他們掃描下列 QR Code。</string>
+  <!-- Label for the download button on the QR code display screen -->
+  <string name="qr_code_display_download">下載</string>
+  <!-- Toast shown when the QR code is successfully saved to Downloads -->
+  <string name="qr_code_download_success">已將 QR Code 儲存至下載項目</string>
+  <!-- Toast shown when saving the QR code to Downloads fails -->
+  <string name="qr_code_download_failure">QR Code 儲存失敗</string>
   <!-- Sub-header in the dialog to share a link to an app from the full list -->
   <string name="share_link_all_apps_subheader">所有動作</string>
   <!-- Sub-header in the dialog to share a link to an app from the most-recent sorted list -->
@@ -2308,23 +2427,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">將 Firefox 設成您的預設瀏覽器</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">試用隱私瀏覽功能</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">試用隱私瀏覽功能</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">上網結束後，%1$s 將不會保留任何 Cookie 與瀏覽紀錄</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">上網結束後，%1$s 將不會保留任何 Cookie 與瀏覽紀錄</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">瀏覽不留痕跡</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">瀏覽不留痕跡</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">%1$s 的隱私瀏覽模式不會儲存您的上網資訊。</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">%1$s 的隱私瀏覽模式不會儲存您的上網資訊。</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">進行第一次搜尋吧</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">進行第一次搜尋吧</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">搜尋附近的東西或探索新鮮事物。</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">搜尋附近的東西或探索新鮮事物。</string>
   <!--
     Survey
 
@@ -2377,8 +2496,6 @@
   <string name="preference_accessibility_text_size_summary">放大或縮小網站上的文字</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">字型大小</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%。</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">自動調整字體大小</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2500,6 +2617,16 @@
   <string name="preference_enhanced_tracking_protection_explanation_2">%s 不讓常見的追蹤器記錄您的上網行為。</string>
   <!-- Text displayed that links to website about enhanced tracking protection -->
   <string name="preference_enhanced_tracking_protection_explanation_learn_more">了解更多</string>
+  <plurals name="trackers_blocked_count">
+    <!--
+      Trackers blocked card on homepage
+
+      Text shown on the trackers blocked card. %d is the number of trackers blocked.
+    -->
+    <item quantity="other">已封鎖 %d 組追蹤器</item>
+  </plurals>
+  <!-- Text shown on the trackers blocked card when no trackers have been blocked yet -->
+  <string name="trackers_blocked_empty">讓我們保護您</string>
   <!-- Preference for enhanced tracking protection for the standard protection settings -->
   <string name="preference_enhanced_tracking_protection_standard_default_1">標準（預設）</string>
   <!-- Preference description for enhanced tracking protection for the standard protection settings -->
@@ -3310,6 +3437,8 @@
     Header text for a section on the home screen.
   -->
   <string name="pocket_stories_header_2">文章</string>
+  <!-- Header text for the Stories screen. -->
+  <string name="stories_screen_text_news">新聞</string>
   <!--
     Context description text for the "Discover more" button in the stories home screen section
     which navigates the user to a screen displaying more stories.
@@ -3402,7 +3531,9 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">無法載入翻譯語言，請確認您的網際網路連線是否正常後再試一次。</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">很抱歉，我們還不支援%1$s翻譯。</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">很抱歉，我們還不支援%1$s翻譯。</string>
+  <!-- The title of the warning card informs the user that translations from a language are not supported yet. %1$s is the name of the source language. -->
+  <string name="translation_error_language_not_supported_warning_text_2">抱歉，我們尚未支援翻譯%1$s。</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">翻譯中…</string>
   <!--
@@ -3726,6 +3857,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">新增至隱私瀏覽分頁</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 
@@ -3764,6 +3897,16 @@
   <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">我不使用 Firefox 的搜尋功能</string>
   <!-- Option for likert scale -->
   <string name="likert_scale_option_8" tools:ignore="UnusedResources">我沒有使用 Sync</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_slow_or_buggy" tools:ignore="UnusedResources">速度慢，或很容易故障</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_features_hard_to_find_or_missing" tools:ignore="UnusedResources">很難找到功能，或缺少某些功能</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_confusing_or_hard_to_use" tools:ignore="UnusedResources">讓人困惑，或者很難使用</string>
+  <!-- Option for likert scale -->
+  <string name="likert_scale_option_its_okay" tools:ignore="UnusedResources">還可以，但沒有比其他瀏覽器好</string>
+  <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+  <string name="likert_scale_option_i_plan_to_keep_using" tools:ignore="BrandUsage,UnusedResources">我會繼續使用 Firefox</string>
   <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">幫助讓 Firefox 的列印功能變得更棒，只需幾秒鐘</string>
   <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
@@ -3778,6 +3921,8 @@
   <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">您對 Firefox 的搜尋體驗滿意嗎？</string>
   <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
   <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">您對 Firefox 的同步功能使用體驗滿意嗎？</string>
+  <!-- Text shown in the survey title for 'describe your experience so far' microsurvey. Note: The word "Firefox" should NOT be translated. -->
+  <string name="microsurvey_describe_your_experience_title" tools:ignore="BrandUsage,UnusedResources">請幫助我們改進 Firefox。下列選項當中哪一項最符合您目前為止的使用體驗？</string>
   <!--
     Accessibility
 

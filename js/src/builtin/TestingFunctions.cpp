@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -28,7 +26,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
-#include <functional>
 #include <utility>
 
 #if defined(XP_UNIX) && !defined(XP_DARWIN)
@@ -108,6 +105,7 @@
 #include "js/Wrapper.h"
 #include "threading/CpuCount.h"
 #include "util/DifferentialTesting.h"
+#include "util/LanguageId.h"
 #include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BooleanObject.h"
@@ -7210,7 +7208,6 @@ class BackEdge {
   EdgeName forgetName() { return std::move(name_); }
   JS::ubi::Node predecessor() const { return predecessor_; }
 
- private:
   // No copy constructor or copying assignment.
   BackEdge(const BackEdge&) = delete;
   BackEdge& operator=(const BackEdge&) = delete;
@@ -8698,7 +8695,7 @@ static bool GetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
 #    else
     std::tm* localtm = std::localtime(now);
     if (localtm) {
-      *local = *localtm;
+      local = *localtm;
 #    endif /* HAVE_LOCALTIME_R */
 
 #    if defined(HAVE_TM_ZONE_TM_GMTOFF)
@@ -8924,7 +8921,13 @@ static bool GetRealmLocale(JSContext* cx, unsigned argc, Value* vp) {
   }
 
 #ifdef JS_HAS_INTL_API
-  auto* str = cx->global()->globalIntlData().defaultLocale(cx);
+  auto defaultLocale = LanguageId::und();
+  if (!cx->global()->globalIntlData().defaultLocale(cx, &defaultLocale)) {
+    return false;
+  }
+
+  auto* str =
+      NewStringCopy<CanGC>(cx, std::string_view{defaultLocale.toString()});
   if (!str) {
     return false;
   }
@@ -9642,6 +9645,10 @@ static bool BaselineCompile(JSContext* cx, unsigned argc, Value* vp) {
       returnedStr = "baseline disabled";
       break;
     }
+    if (script->length() > jit::BaselineMaxScriptLength ||
+        script->nslots() > jit::BaselineMaxScriptSlots) {
+      script->disableBaselineCompile();
+    }
     if (!script->canBaselineCompile()) {
       returnedStr = "can't compile";
       break;
@@ -9812,6 +9819,16 @@ static bool GetICUOptions(JSContext* cx, unsigned argc, Value* vp) {
   str = buf.toString(cx);
   if (!str ||
       !JS_DefineProperty(cx, info, "host-timezone", str, JSPROP_ENUMERATE)) {
+    return false;
+  }
+
+#  if MOZ_SYSTEM_ICU
+  bool isSystem = true;
+#  else
+  bool isSystem = false;
+#  endif
+  Rooted<JS::Value> value(cx, BooleanValue(isSystem));
+  if (!JS_DefineProperty(cx, info, "system", value, JSPROP_ENUMERATE)) {
     return false;
   }
 #endif
@@ -11168,7 +11185,8 @@ JS_FN_HELP("getICUOptions", GetICUOptions, 0, 0,
 "    locale: the ICU default locale, e.g. 'en_US'\n"
 "    tzdata: a string containing the tzdata version number, e.g. '2020a'\n"
 "    timezone: the ICU default time zone, e.g. 'America/Los_Angeles'\n"
-"    host-timezone: the host time zone, e.g. 'America/Los_Angeles'"),
+"    host-timezone: the host time zone, e.g. 'America/Los_Angeles'\n"
+"    system: true if a system ICU is used"),
 
 JS_FN_HELP("getAvailableLocalesOf", GetAvailableLocalesOf, 0, 0,
 "getAvailableLocalesOf(name)",

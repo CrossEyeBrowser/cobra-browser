@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -19,6 +17,7 @@
 #include "mozilla/Sprintf.h"
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <optional>
 
@@ -252,7 +251,7 @@ template <typename... Args>
 namespace bits {
 
 inline uint64_t CountTrailingZeros(uint64_t value) {
-  return mozilla::CountTrailingZeroes64(value);
+  return std::countr_zero(value);
 }
 
 inline size_t RoundUpToPowerOfTwo32(size_t value) {
@@ -261,7 +260,7 @@ inline size_t RoundUpToPowerOfTwo32(size_t value) {
 
 template <typename T>
 constexpr bool IsPowerOfTwo(T value) {
-  return value > 0 && (value & (value - 1)) == 0;
+  return std::has_single_bit(value);
 }
 
 }  // namespace bits

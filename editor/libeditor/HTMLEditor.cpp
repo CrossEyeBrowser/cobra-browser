@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -1961,8 +1960,13 @@ nsresult HTMLEditor::InsertElementAtSelectionAsAction(
     if (MOZ_LIKELY(aElement->IsInComposedDoc())) {
       const auto afterElement = EditorDOMPoint::After(*aElement);
       if (MOZ_LIKELY(afterElement.IsInContentNode())) {
-        nsresult rv =
-            EnsureNoFollowingUnnecessaryLineBreak(afterElement, *editingHost);
+        nsresult rv = EnsureNoFollowingUnnecessaryLineBreak(
+            afterElement,
+            // When user inserting content, the web app may expect that nothing
+            // extant content will be deleted. Therefore, we should preserve
+            // preformatted linefeed at least.
+            PreservePreformattedLineBreak::Yes,
+            PaddingForEmptyBlock::Significant, *editingHost);
         if (NS_FAILED(rv)) {
           NS_WARNING(
               "HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
@@ -4321,7 +4325,8 @@ Result<CreateLineBreakResult, nsresult> HTMLEditor::InsertLineBreak(
 
 nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
     const EditorDOMPoint& aNextOrAfterModifiedPoint,
-    const Element& aEditingHost) {
+    PreservePreformattedLineBreak aPreservePreformattedLineBreak,
+    PaddingForEmptyBlock aPaddingForEmptyBlock, const Element& aEditingHost) {
   MOZ_ASSERT(aNextOrAfterModifiedPoint.IsInContentNode());
   MOZ_ASSERT(aNextOrAfterModifiedPoint.IsSetAndValid());
 
@@ -4350,8 +4355,7 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
 
   const WSScanResult nextThing =
       HTMLEditUtils::ScanInclusiveNextThingWithIgnoringUnnecessaryLineBreak(
-          aNextOrAfterModifiedPoint, PaddingForEmptyBlock::Significant,
-          aEditingHost);
+          aNextOrAfterModifiedPoint, aPaddingForEmptyBlock, aEditingHost);
   const Maybe<EditorLineBreak>& unnecessaryLineBreak =
       nextThing.MaybeIgnoredLineBreak();
   if (unnecessaryLineBreak.isNothing() ||
@@ -4387,6 +4391,16 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
     return rv;
   }
   MOZ_ASSERT(isNewLinePreformatted);
+  if (aPreservePreformattedLineBreak == PreservePreformattedLineBreak::Yes) {
+    // Do not preserve preformatted linefeed if it's a padding for empty block
+    // even if the caller wants to preserve unnecessary preformatted linefeed
+    // because it's set to "Yes" when the caller inserts new content, but the
+    // other browsers do not preserve the padding linefeed for empty block.
+    if (aPaddingForEmptyBlock == PaddingForEmptyBlock::Significant ||
+        !unnecessaryLineBreak->IsPaddingForEmptyBlock()) {
+      return NS_OK;
+    }
+  }
   const auto IsVisibleChar = [&](char16_t aChar) {
     switch (aChar) {
       case HTMLEditUtils::kNewLine:
@@ -7114,18 +7128,18 @@ Element* HTMLEditor::ComputeEditingHostInternal(
     if (aLimitInBodyElement != LimitInBodyElement::Yes) {
       return const_cast<Element*>(aCandidateEditingHost);
     }
+    auto* body = document->GetBodyElement();
     // By default, we should limit editing host to the <body> element for
     // avoiding deleting or creating unexpected elements outside the <body>.
     // However, this is incompatible with Chrome so that we should stop
     // doing this with adding safety checks more.
-    if (document->GetBodyElement() &&
-        nsContentUtils::ContentIsFlattenedTreeDescendantOf(
-            aCandidateEditingHost, document->GetBodyElement())) {
+    if (body && nsContentUtils::ContentIsFlattenedTreeDescendantOf(
+                    aCandidateEditingHost, body)) {
       return const_cast<Element*>(aCandidateEditingHost);
     }
     // XXX If aContent is an editing host and has no parent node, we reach here,
     //     but returning the <body> which is not connected to aContent is odd.
-    return document->GetBodyElement();
+    return body && body->IsEditable() ? body : nullptr;
   };
 
   // We're HTML editor for contenteditable
@@ -7183,16 +7197,19 @@ Element* HTMLEditor::ComputeEditingHostInternal(
     // If there is no focused element and the document is in the design mode,
     // let's return the <body>.
     if (document->IsInDesignMode()) {
-      return document->GetBodyElement();
+      auto* body = document->GetBodyElement();
+      // return null if body has contenteditable=false
+      return body && body->IsEditable() ? body : nullptr;
     }
     // Otherwise, we cannot find the editing host...
     return nullptr;
   }();
-  if ((content && content->IsInDesignMode()) ||
-      (!content && document->IsInDesignMode())) {
+  if (!content && document->IsInDesignMode()) {
     // FIXME: There may be no <body>.  In such case and aLimitInBodyElement is
     // "No", we should use root element instead.
-    return document->GetBodyElement();
+    auto* body = document->GetBodyElement();
+    // return null if body has contenteditable=false
+    return body && body->IsEditable() ? body : nullptr;
   }
 
   if (NS_WARN_IF(!content)) {

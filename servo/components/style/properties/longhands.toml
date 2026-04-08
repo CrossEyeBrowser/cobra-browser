@@ -3535,11 +3535,11 @@ keyword = { values = ["padding-box", "border-box", "content-box"], gecko_enum_pr
 
 [background-blend-mode]
 struct = "background"
-engine = "gecko"
 vector = {}
 animation_type = "discrete"
 spec = "https://drafts.fxtf.org/compositing/#background-blend-mode"
 affects = "paint"
+servo_restyle_damage = "repaint"
 
 [background-blend-mode.keyword]
 values = [
@@ -3711,10 +3711,7 @@ struct = "font"
 engine = "gecko"
 spec = "https://w3c.github.io/mathml-core/#the-math-shift"
 animation_type = "discrete"
-enabled_in = "ua"
 affects = "layout"
-gecko_pref = "mathml.math_shift.enabled"
-has_effect_on_gecko_scrollbars = false
 keyword = { values = ["normal", "compact"] }
 
 [-moz-osx-font-smoothing]
@@ -4139,7 +4136,7 @@ keyword = { values = ["collapse", "preserve", "preserve-breaks", "break-spaces"]
 [timeline-scope]
 type = "ScopedName"
 initial = "computed::ScopedName::none()"
-struct = "box"
+struct = "ui"
 engine = "gecko"
 animation_type = "none"
 gecko_pref = "layout.css.scroll-driven-animations.enabled"

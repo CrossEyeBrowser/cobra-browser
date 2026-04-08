@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -74,6 +72,7 @@
 #include "mozilla/dom/LSObject.h"
 #include "mozilla/dom/MemoryReportRequest.h"
 #include "mozilla/dom/Navigation.h"
+#include "mozilla/dom/NavigationHistoryEntry.h"
 #include "mozilla/dom/PSessionStorageObserverChild.h"
 #include "mozilla/dom/PolicyContainer.h"
 #include "mozilla/dom/PostMessageEvent.h"
@@ -679,8 +678,7 @@ mozilla::ipc::IPCResult ContentChild::RecvSetXPCOMProcessAttributes(
   PerfStats::SetCollectionMask(aXPCOMInit.perfStatsMask());
   LookAndFeel::EnsureInit();
   InitSharedUASheets(std::move(aSharedUASheetHandle), aSharedUASheetAddress);
-  InitXPCOM(std::move(aXPCOMInit), aInitialData,
-            aIsReadyForBackgroundProcessing);
+  InitXPCOM(aXPCOMInit, aInitialData, aIsReadyForBackgroundProcessing);
   InitGraphicsDeviceData(aXPCOMInit.contentDeviceData());
   RefPtr<net::ChildDNSService> dnsServiceChild =
       dont_AddRef(net::ChildDNSService::GetSingleton());
@@ -1209,11 +1207,12 @@ nsresult ContentChild::ProvideWindowCommon(
       return;
     }
 
-    ParentShowInfo showInfo(u""_ns, /* fakeShowInfo = */ true,
-                            /* isTransparent = */ false,
-                            newChild->WebWidget()->GetDPI(),
-                            newChild->WebWidget()->RoundsWidgetCoordinatesTo(),
-                            newChild->WebWidget()->GetDefaultScale().scale);
+    ParentShowInfo showInfo(
+        u""_ns, /* fakeShowInfo = */ true,
+        /* isTransparent = */ false, newChild->WebWidget()->GetDPI(),
+        newChild->WebWidget()->RoundsWidgetCoordinatesTo(),
+        newChild->WebWidget()->GetDefaultScale().scale,
+        newChild->WebWidget()->GetDesktopToDeviceScale().scale);
 
     newChild->SetMaxTouchPoints(maxTouchPoints);
 
@@ -1369,7 +1368,7 @@ void ContentChild::InitSharedUASheets(
 }
 
 void ContentChild::InitXPCOM(
-    XPCOMInitData&& aXPCOMInit,
+    XPCOMInitData& aXPCOMInit,
     NotNull<mozilla::dom::ipc::StructuredCloneData*> aInitialData,
     bool aIsReadyForBackgroundProcessing) {
 #if defined(XP_WIN)
@@ -1403,6 +1402,8 @@ void ContentChild::InitXPCOM(
     NS_WARNING("Couldn't register console listener for child process");
 
   mAvailableDictionaries = std::move(aXPCOMInit.dictionaries());
+  MOZ_ASSERT(aXPCOMInit.dictionaries().IsEmpty(),
+             "nsTArray is left in an empty but valid state");
 
   RecvSetOffline(aXPCOMInit.isOffline());
   RecvSetConnectivity(aXPCOMInit.isConnected());
@@ -1454,9 +1455,13 @@ void ContentChild::InitXPCOM(
 
   // The stylesheet cache is not ready yet. Store this URL for future use.
   nsCOMPtr<nsIURI> ucsURL = std::move(aXPCOMInit.userContentSheetURL());
+  MOZ_ASSERT(!aXPCOMInit.userContentSheetURL(),
+             "RefPtr is left in a null but valid state");
   GlobalStyleSheetCache::SetUserContentCSSURL(ucsURL);
 
   GfxInfoBase::SetFeatureStatus(std::move(aXPCOMInit.gfxFeatureStatus()));
+  MOZ_ASSERT(aXPCOMInit.gfxFeatureStatus().IsEmpty(),
+             "nsTArray is left in an empty but valid state");
 
   // Initialize the RemoteMediaManager thread and its associated PBackground
   // channel.
@@ -2565,6 +2570,40 @@ mozilla::ipc::IPCResult ContentChild::RecvAddPermission(
   return IPC_OK();
 }
 
+mozilla::ipc::IPCResult ContentChild::RecvSetBrowserPermission(
+    const nsCString& aOrigin, const nsCString& aType, const uint32_t& aAction,
+    const uint64_t& aBrowserId, const bool& aIsRemoval) {
+  RefPtr<PermissionManager> permissionManager =
+      PermissionManager::GetInstance();
+  MOZ_ASSERT(permissionManager);
+
+  nsAutoCString originNoSuffix;
+  OriginAttributes attrs;
+  bool success = attrs.PopulateFromOrigin(aOrigin, originNoSuffix);
+  NS_ENSURE_TRUE(success, IPC_FAIL_NO_REASON(this));
+
+  nsCOMPtr<nsIURI> uri;
+  nsresult rv = NS_NewURI(getter_AddRefs(uri), originNoSuffix);
+  NS_ENSURE_SUCCESS(rv, IPC_OK());
+
+  nsCOMPtr<nsIPrincipal> principal =
+      mozilla::BasePrincipal::CreateContentPrincipal(uri, attrs);
+
+  permissionManager->SetBrowserPermissionFromIPC(principal, aType, aAction,
+                                                 aBrowserId, aIsRemoval);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult ContentChild::RecvClearBrowserPermissions(
+    const uint64_t& aBrowserId, const uint32_t& aActionFilter) {
+  RefPtr<PermissionManager> permissionManager =
+      PermissionManager::GetInstance();
+  MOZ_ASSERT(permissionManager);
+
+  permissionManager->ClearBrowserPermissionsFromIPC(aBrowserId, aActionFilter);
+  return IPC_OK();
+}
+
 mozilla::ipc::IPCResult ContentChild::RecvRemoveAllPermissions() {
   RefPtr<PermissionManager> permissionManager =
       PermissionManager::GetInstance();
@@ -3240,40 +3279,6 @@ mozilla::ipc::IPCResult ContentChild::RecvPWebBrowserPersistDocumentConstructor(
   } else {
     static_cast<WebBrowserPersistDocumentChild*>(aActor)->Start(foundDoc);
   }
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentChild::RecvPush(const nsCString& aScope,
-                                               nsIPrincipal* aPrincipal,
-                                               const nsString& aMessageId) {
-  PushMessageDispatcher dispatcher(aScope, aPrincipal, aMessageId, Nothing());
-  (void)NS_WARN_IF(NS_FAILED(dispatcher.NotifyObserversAndWorkers()));
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentChild::RecvPushWithData(
-    const nsCString& aScope, nsIPrincipal* aPrincipal,
-    const nsString& aMessageId, nsTArray<uint8_t>&& aData) {
-  PushMessageDispatcher dispatcher(aScope, aPrincipal, aMessageId,
-                                   Some(std::move(aData)));
-  (void)NS_WARN_IF(NS_FAILED(dispatcher.NotifyObserversAndWorkers()));
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentChild::RecvPushError(const nsCString& aScope,
-                                                    nsIPrincipal* aPrincipal,
-                                                    const nsString& aMessage,
-                                                    const uint32_t& aFlags) {
-  PushErrorDispatcher dispatcher(aScope, aPrincipal, aMessage, aFlags);
-  (void)NS_WARN_IF(NS_FAILED(dispatcher.NotifyObserversAndWorkers()));
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult
-ContentChild::RecvNotifyPushSubscriptionModifiedObservers(
-    const nsCString& aScope, nsIPrincipal* aPrincipal) {
-  PushSubscriptionModifiedDispatcher dispatcher(aScope, aPrincipal);
-  (void)NS_WARN_IF(NS_FAILED(dispatcher.NotifyObservers()));
   return IPC_OK();
 }
 
@@ -4637,6 +4642,38 @@ mozilla::ipc::IPCResult ContentChild::RecvStopLoad(
   if (auto* docShell = nsDocShell::Cast(bc->GetDocShell())) {
     docShell->Stop(aStopFlags);
   }
+
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult ContentChild::RecvDeactivateDocuments(
+    const MaybeDiscarded<BrowsingContext>& aContext) {
+  if (aContext.IsNullOrDiscarded()) {
+    return IPC_OK();
+  }
+  BrowsingContext* browsingContext = aContext.get();
+  MOZ_DIAGNOSTIC_ASSERT(browsingContext->IsTopContent());
+
+  browsingContext->DeactivateDocuments();
+
+  return IPC_OK();
+}
+
+// https://html.spec.whatwg.org/#update-document-for-history-step-application
+// Perform steps 7 and 9 for the BFCache case.
+mozilla::ipc::IPCResult ContentChild::RecvReactivateDocuments(
+    const MaybeDiscarded<BrowsingContext>& aContext,
+    const Maybe<SessionHistoryInfo>& aReactivatedEntry,
+    const nsTArray<SessionHistoryInfo>& aNewSHEs,
+    const Maybe<PreviousSessionHistoryInfo>& aPreviousEntryForActivation) {
+  if (aContext.IsNullOrDiscarded()) {
+    return IPC_OK();
+  }
+  RefPtr browsingContext = aContext.get();
+  MOZ_DIAGNOSTIC_ASSERT(browsingContext->IsTopContent());
+
+  browsingContext->ReactivateDocuments(aReactivatedEntry, aNewSHEs,
+                                       aPreviousEntryForActivation);
 
   return IPC_OK();
 }

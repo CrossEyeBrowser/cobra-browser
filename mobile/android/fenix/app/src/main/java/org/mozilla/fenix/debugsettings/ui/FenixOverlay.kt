@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.StrictMode
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -26,10 +27,11 @@ import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.integrity.IntegrityClient
 import mozilla.components.concept.storage.CreditCardsAddressesStorage
 import mozilla.components.concept.storage.LoginsStorage
+import mozilla.components.lib.llm.mlpa.MlpaTokenStorage
 import mozilla.telemetry.glean.Glean
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.ClientUUID
-import org.mozilla.fenix.components.Llm
+import org.mozilla.fenix.components.llm.Llm
 import org.mozilla.fenix.debugsettings.addresses.AddressesDebugRegionRepository
 import org.mozilla.fenix.debugsettings.addresses.AddressesTools
 import org.mozilla.fenix.debugsettings.addresses.FakeAddressesDebugRegionRepository
@@ -53,6 +55,7 @@ import org.mozilla.fenix.debugsettings.navigation.DebugDrawerRoute
 import org.mozilla.fenix.debugsettings.store.DebugDrawerAction
 import org.mozilla.fenix.debugsettings.store.DebugDrawerNavigationMiddleware
 import org.mozilla.fenix.debugsettings.store.DebugDrawerStore
+import org.mozilla.fenix.debugsettings.store.DebugDrawerTelemetryMiddleware
 import org.mozilla.fenix.debugsettings.store.DrawerStatus
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.theme.DefaultThemeProvider
@@ -161,8 +164,13 @@ private fun FenixOverlay(
                     navController = navController,
                     scope = coroutineScope,
                 ),
+                DebugDrawerTelemetryMiddleware(),
             ),
         )
+    }
+
+    LaunchedEffect(Unit) {
+        debugDrawerStore.dispatch(DebugDrawerAction.ViewAppeared)
     }
 
     val debugDrawerDestinations = remember {
@@ -229,6 +237,6 @@ private fun FenixOverlayPreview() {
         creditCardsAddressesStorage = FakeCreditCardsAddressesStorage(),
         clientUUID = FakeClientUUID(),
         integrityClient = IntegrityClient.testSuccess,
-        llm = Llm(FakeClient(), FakeIntegrityClient(), FakeUserIdProvider()),
+        llm = Llm(FakeClient(), MlpaTokenStorage.static(), { null }, FakeIntegrityClient(), FakeUserIdProvider()),
     )
 }

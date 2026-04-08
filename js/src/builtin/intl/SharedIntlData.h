@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -20,6 +18,7 @@
 #include "js/Result.h"
 #include "js/RootingAPI.h"
 #include "js/Utility.h"
+#include "util/LanguageId.h"
 #include "vm/StringType.h"
 
 namespace mozilla::intl {
@@ -258,19 +257,19 @@ class SharedIntlData {
       JSContext* cx);
 
  private:
-  using Locale = JSAtom*;
+  using Locale = LanguageId;
 
   struct LocaleHasher {
-    struct Lookup : LinearStringLookup {
-      explicit Lookup(const JSLinearString* locale);
-      explicit Lookup(std::string_view locale);
-    };
+    using Lookup = Locale;
 
-    static js::HashNumber hash(const Lookup& lookup) { return lookup.hash; }
-    static bool match(Locale key, const Lookup& lookup);
+    static js::HashNumber hash(const Lookup& lookup) { return lookup.hash(); }
+
+    static bool match(Locale key, const Lookup& lookup) {
+      return key == lookup;
+    }
   };
 
-  using LocaleSet = GCHashSet<Locale, LocaleHasher, SystemAllocPolicy>;
+  using LocaleSet = HashSet<Locale, LocaleHasher, SystemAllocPolicy>;
 
   // Set of available locales for all Intl service constructors except Collator,
   // which uses its own set.
@@ -314,8 +313,7 @@ class SharedIntlData {
    * service constructor. Otherwise sets |available| to false.
    */
   [[nodiscard]] bool isAvailableLocale(JSContext* cx, AvailableLocaleKind kind,
-                                       JS::Handle<JSLinearString*> locale,
-                                       bool* available);
+                                       LanguageId locale, bool* available);
 
   /**
    * Returns all available locales for |kind|.
@@ -346,7 +344,7 @@ class SharedIntlData {
    * calling into ICU to find the upper-case first locales in that case.
    */
 
-#if DEBUG || MOZ_SYSTEM_ICU
+#if DEBUG
   LocaleSet upperCaseFirstLocales;
 
   bool upperCaseFirstInitialized = false;
@@ -362,11 +360,10 @@ class SharedIntlData {
    * Sets |isUpperFirst| to true if |locale| sorts upper-case characters
    * before lower-case characters.
    */
-  bool isUpperCaseFirst(JSContext* cx, JS::Handle<JSLinearString*> locale,
-                        bool* isUpperFirst);
+  bool isUpperCaseFirst(JSContext* cx, LanguageId locale, bool* isUpperFirst);
 
  private:
-#if DEBUG || MOZ_SYSTEM_ICU
+#if DEBUG
   LocaleSet ignorePunctuationLocales;
 
   bool ignorePunctuationInitialized = false;
@@ -381,7 +378,7 @@ class SharedIntlData {
   /**
    * Sets |ignorePunctuation| to true if |locale| ignores punctuation.
    */
-  bool isIgnorePunctuation(JSContext* cx, JS::Handle<JSLinearString*> locale,
+  bool isIgnorePunctuation(JSContext* cx, LanguageId locale,
                            bool* ignorePunctuation);
 
  private:

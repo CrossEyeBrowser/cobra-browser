@@ -18,6 +18,7 @@ use crate::applicable_declarations::ApplicableDeclarationBlock;
 use crate::bloom::each_relevant_element_hash;
 use crate::context::{QuirksMode, SharedStyleContext, UpdateAnimationsTasks};
 use crate::data::{ElementDataMut, ElementDataRef, ElementDataWrapper};
+use crate::device::Device;
 use crate::dom::{
     AttributeProvider, LayoutIterator, NodeInfo, OpaqueNode, TDocument, TElement, TNode,
     TShadowRoot,
@@ -54,13 +55,13 @@ use crate::gecko_bindings::structs::{nsAtom, nsIContent, nsINode_BooleanFlag};
 use crate::gecko_bindings::structs::{nsINode as RawGeckoNode, Element as RawGeckoElement};
 use crate::global_style_data::GLOBAL_STYLE_DATA;
 use crate::invalidation::element::restyle_hints::RestyleHint;
-use crate::media_queries::Device;
 use crate::properties::{
     animated_properties::{AnimationValue, AnimationValueMap},
     ComputedValues, Importance, OwnedPropertyDeclarationId, PropertyDeclaration,
     PropertyDeclarationBlock, PropertyDeclarationId, PropertyDeclarationIdSet,
 };
 use crate::rule_tree::CascadeLevel as ServoCascadeLevel;
+use crate::rule_tree::CascadeOrigin as ServoCascadeOrigin;
 use crate::selector_parser::{AttrValue, Lang};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::string_cache::{Atom, Namespace, WeakAtom, WeakNamespace};
@@ -79,7 +80,6 @@ use selectors::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstrain
 use selectors::bloom::{BloomFilter, BLOOM_HASH_MASK};
 use selectors::matching::VisitedHandlingMode;
 use selectors::matching::{ElementSelectorFlags, MatchingContext};
-use selectors::parser::PseudoElement as ParserPseudoElement;
 use selectors::sink::Push;
 use selectors::{Element, OpaqueElement};
 use servo_arc::{Arc, ArcBorrow};
@@ -1637,7 +1637,7 @@ impl<'le> TElement for GeckoElement<'le> {
         if let Some(decl) = declarations {
             rules.push(ApplicableDeclarationBlock::from_declarations(
                 unsafe { Arc::from_raw_addrefed(decl) },
-                ServoCascadeLevel::UANormal,
+                ServoCascadeLevel::new(ServoCascadeOrigin::UA),
                 LayerOrder::root(),
             ));
         }
@@ -1665,7 +1665,7 @@ impl<'le> TElement for GeckoElement<'le> {
             let arc = Arc::new_leaked(global_style_data.shared_lock.wrap(pdb));
             ApplicableDeclarationBlock::from_declarations(
                 arc,
-                ServoCascadeLevel::PresHints,
+                ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                 LayerOrder::root(),
             )
         });
@@ -1678,7 +1678,7 @@ impl<'le> TElement for GeckoElement<'le> {
             let arc = Arc::new_leaked(global_style_data.shared_lock.wrap(pdb));
             ApplicableDeclarationBlock::from_declarations(
                 arc,
-                ServoCascadeLevel::PresHints,
+                ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                 LayerOrder::root(),
             )
         });
@@ -1692,7 +1692,7 @@ impl<'le> TElement for GeckoElement<'le> {
                 let arc = Arc::new_leaked(global_style_data.shared_lock.wrap(pdb));
                 ApplicableDeclarationBlock::from_declarations(
                     arc,
-                    ServoCascadeLevel::PresHints,
+                    ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                     LayerOrder::root(),
                 )
             });
@@ -1716,7 +1716,7 @@ impl<'le> TElement for GeckoElement<'le> {
         if let Some(decl) = declarations {
             hints.push(ApplicableDeclarationBlock::from_declarations(
                 unsafe { Arc::from_raw_addrefed(decl) },
-                ServoCascadeLevel::PresHints,
+                ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                 LayerOrder::root(),
             ));
         }
@@ -1724,7 +1724,7 @@ impl<'le> TElement for GeckoElement<'le> {
         if let Some(decl) = declarations {
             hints.push(ApplicableDeclarationBlock::from_declarations(
                 unsafe { Arc::from_raw_addrefed(decl) },
-                ServoCascadeLevel::PresHints,
+                ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                 LayerOrder::root(),
             ));
         }
@@ -1750,7 +1750,7 @@ impl<'le> TElement for GeckoElement<'le> {
             if let Some(decl) = declarations {
                 hints.push(ApplicableDeclarationBlock::from_declarations(
                     unsafe { Arc::from_raw_addrefed(decl) },
-                    ServoCascadeLevel::PresHints,
+                    ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                     LayerOrder::root(),
                 ));
             }
@@ -1764,7 +1764,7 @@ impl<'le> TElement for GeckoElement<'le> {
                 if let Some(decl) = declarations {
                     hints.push(ApplicableDeclarationBlock::from_declarations(
                         unsafe { Arc::from_raw_addrefed(decl) },
-                        ServoCascadeLevel::PresHints,
+                        ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                         LayerOrder::root(),
                     ));
                 }
@@ -1786,7 +1786,7 @@ impl<'le> TElement for GeckoElement<'le> {
             let arc = Arc::new(global_style_data.shared_lock.wrap(pdb));
             hints.push(ApplicableDeclarationBlock::from_declarations(
                 arc,
-                ServoCascadeLevel::PresHints,
+                ServoCascadeLevel::new(ServoCascadeOrigin::PresHints),
                 LayerOrder::root(),
             ))
         }

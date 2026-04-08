@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -117,6 +115,10 @@ static mozilla::LazyLogModule sRootScrollbarsLog("rootscrollbars");
     MOZ_LOG(sRootScrollbarsLog, LogLevel::Debug, (__VA_ARGS__)); \
   }
 static mozilla::LazyLogModule sDisplayportLog("apz.displayport");
+
+static mozilla::LazyLogModule sScrollEndLog("apz.scrollend");
+#define SCROLLEND_LOG(...) \
+  MOZ_LOG(sScrollEndLog, LogLevel::Debug, (__VA_ARGS__));
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -286,13 +288,14 @@ ScrollContainerFrame::ScrollContainerFrame(ComputedStyle* aStyle,
       mApzAnimationTriggeredByScriptRequested(false),
       mReclampVVOffsetInReflowFinished(false),
       mMayScheduleScrollAnimations(false),
+      mForceDisableOverlayScrollbars(false),
 #ifdef MOZ_WIDGET_ANDROID
       mHasVerticalOverflowForDynamicToolbar(false),
 #endif
       mVelocityQueue(PresContext()) {
   AppendScrollUpdate(ScrollPositionUpdate::NewScrollframe(nsPoint()));
 
-  if (UseOverlayScrollbars()) {
+  if (PresContext()->UseOverlayScrollbars()) {
     mScrollbarActivity = new ScrollbarActivity(this);
   }
 
@@ -302,6 +305,21 @@ ScrollContainerFrame::ScrollContainerFrame(ComputedStyle* aStyle,
 }
 
 ScrollContainerFrame::~ScrollContainerFrame() = default;
+
+static nsSliderFrame* GetSliderFrame(nsIFrame* aScrollbarFrame) {
+  if (!aScrollbarFrame) {
+    return nullptr;
+  }
+
+  for (const auto& childList : aScrollbarFrame->ChildLists()) {
+    for (nsIFrame* frame : childList.mList) {
+      if (nsSliderFrame* sliderFrame = do_QueryFrame(frame)) {
+        return sliderFrame;
+      }
+    }
+  }
+  return nullptr;
+}
 
 void ScrollContainerFrame::ScrollbarActivityStarted() const {
   if (mScrollbarActivity) {
@@ -560,7 +578,9 @@ ScrollReflowInput::ScrollReflowInput(ScrollContainerFrame* aFrame,
   // makes us suppress scrollbars in CreateAnonymousContent. But if this frame
   // initially had a non-'none' scrollbar-width and dynamically changed to
   // 'none', then we'll need to handle it here.
-  const auto scrollbarWidth = scrollbarStyle->StyleUIReset()->ScrollbarWidth();
+  const auto scrollbarWidth =
+      nsLayoutUtils::ScrollbarWidthFor(mReflowInput.mFrame);
+
   if (scrollbarWidth == StyleScrollbarWidth::None) {
     mHScrollbar = ShowScrollbar::Never;
     mHScrollbarAllowedForScrollingVVInsideLV = false;
@@ -1113,20 +1133,19 @@ void ScrollContainerFrame::PlaceScrollArea(ScrollReflowInput& aState,
   // Set the x,y of the scrolled frame to the correct value
   mScrolledFrame->SetPosition(ScrollPort().TopLeft() - aScrollPosition);
 
-  // Recompute our scrollable overflow, taking perspective children into
-  // account. Note that this only recomputes the overflow areas stored on the
-  // helper (which are used to compute scrollable length and scrollbar thumb
-  // sizes) but not the overflow areas stored on the frame. This seems to work
-  // for now, but it's possible that we may need to update both in the future.
-  AdjustForPerspective(aState.mContentsOverflowAreas.ScrollableOverflow());
-
+  if (ChildrenHavePerspective()) {
+    // Recompute our scrollable overflow, taking perspective children into
+    // account.
+    if (RecomputePerspectiveChildrenOverflow(this)) {
+      aState.mContentsOverflowAreas = mScrolledFrame->GetOverflowAreas();
+    }
+    AdjustForPerspective(aState.mContentsOverflowAreas.ScrollableOverflow());
+  }
   // Preserve the width or height of empty rects
   const nsSize portSize = ScrollPort().Size();
   nsRect scrolledRect = GetUnsnappedScrolledRectInternal(
       aState.mContentsOverflowAreas.ScrollableOverflow(), portSize);
-  nsRect scrolledArea =
-      scrolledRect.UnionEdges(nsRect(nsPoint(0, 0), portSize));
-
+  nsRect scrolledArea = scrolledRect.UnionEdges(nsRect(nsPoint(), portSize));
   // Store the new overflow area. Note that this changes where an outline
   // of the scrolled frame would be painted, but scrolled frames can't have
   // outlines (the outline would go on this scrollframe instead).
@@ -1151,8 +1170,7 @@ nsMargin ScrollContainerFrame::IntrinsicScrollbarGutterSize() const {
   }
 
   const auto* styleForScrollbar = nsLayoutUtils::StyleForScrollbar(this);
-  const auto& styleScrollbarWidth =
-      styleForScrollbar->StyleUIReset()->ScrollbarWidth();
+  const auto& styleScrollbarWidth = ScrollbarWidth(styleForScrollbar);
   if (styleScrollbarWidth == StyleScrollbarWidth::None) {
     // Scrollbar shouldn't appear at all with "scrollbar-width: none".
     return {};
@@ -1428,9 +1446,7 @@ void ScrollContainerFrame::AdjustForPerspective(nsRect& aScrollableOverflow) {
   // If we have perspective that is being applied to our children, then
   // the effective transform on the child depends on the relative position
   // of the child to us and changes during scrolling.
-  if (!ChildrenHavePerspective()) {
-    return;
-  }
+  MOZ_ASSERT(ChildrenHavePerspective());
   aScrollableOverflow.SetEmpty();
   GetScrollableOverflowForPerspective(mScrolledFrame, mScrolledFrame,
                                       ScrollPort(), nsPoint(),
@@ -1640,8 +1656,7 @@ nsMargin ScrollContainerFrame::GetDesiredScrollbarSizes() const {
     return {};
   }
 
-  const auto& style = *nsLayoutUtils::StyleForScrollbar(this);
-  const auto scrollbarWidth = style.StyleUIReset()->ScrollbarWidth();
+  const auto scrollbarWidth = ScrollbarWidth();
   if (scrollbarWidth == StyleScrollbarWidth::None) {
     return {};
   }
@@ -1676,10 +1691,14 @@ nscoord ScrollContainerFrame::GetNonOverlayScrollbarSize(
 
 void ScrollContainerFrame::HandleScrollbarStyleSwitching() {
   // Check if we switched between scrollbar styles.
-  if (mScrollbarActivity && !UseOverlayScrollbars()) {
+  // We need to check the global UseOverlayScrollbars() because whether to
+  // disable overlay scrollbars for each scroll container depends on
+  // ::-webkit-scrollbar styles on the container and disabling overlay for
+  // individual container uses this mScrollbarActivity.
+  if (mScrollbarActivity && !PresContext()->UseOverlayScrollbars()) {
     mScrollbarActivity->Destroy();
     mScrollbarActivity = nullptr;
-  } else if (!mScrollbarActivity && UseOverlayScrollbars()) {
+  } else if (!mScrollbarActivity && PresContext()->UseOverlayScrollbars()) {
     mScrollbarActivity = new ScrollbarActivity(this);
   }
 }
@@ -1708,7 +1727,16 @@ void ScrollContainerFrame::SetHasOutOfFlowContentInsideFilter() {
   mHasOutOfFlowContentInsideFilter = true;
 }
 
-bool ScrollContainerFrame::WantAsyncScroll() const {
+bool ScrollContainerFrame::WantAsyncScroll(
+    NonZeroScrollRangeOnly aNonZeroScrollRangeOnly) const {
+  if (!bool(aNonZeroScrollRangeOnly)) {
+    const nsStyleDisplay* disp = GetFrameForStyle()->StyleDisplay();
+    if (disp->mOverscrollBehaviorX != StyleOverscrollBehavior::Auto ||
+        disp->mOverscrollBehaviorY != StyleOverscrollBehavior::Auto) {
+      return true;
+    }
+  }
+
   ScrollStyles styles = GetScrollStyles();
 
   // First, as an optimization because getting the scrollrange is
@@ -1839,7 +1867,19 @@ void ScrollContainerFrame::ScrollbarReleased(nsScrollbarFrame* aScrollbar) {
 
   // Perform scroll snapping, if needed.  Scrollbar movement uses the same
   // smooth scrolling animation as keyboard scrolling.
-  ScrollSnap(mDestination, ScrollMode::Smooth);
+  bool didSnap = ScrollSnap(mDestination, ScrollMode::Smooth);
+
+  SCROLLEND_LOG("%s: did-snap=%s scrollend-pending=%s", __FUNCTION__,
+                didSnap ? "true" : "false",
+                mScrollbarClickAndHoldScrollendPending ? "true" : "false");
+  // If a scrollbar click and hold scroll has occured and a scroll-snap will
+  // not occur, post a scrollend event. If a scroll snap will occur. Let the
+  // scroll-snap scroll post the scrollend event.
+  if (!didSnap && mScrollbarClickAndHoldScrollendPending) {
+    PostScrollEndEvent();
+  }
+
+  mScrollbarClickAndHoldScrollendPending = false;
 }
 
 void ScrollContainerFrame::ScrollByUnit(nsScrollbarFrame* aScrollbar,
@@ -2246,6 +2286,20 @@ void ScrollContainerFrame::AsyncScrollCallback(ScrollContainerFrame* aInstance,
                                  aInstance->mAsyncScroll->TakeSnapTargetIds());
 }
 
+bool ScrollContainerFrame::SliderFrameInClickAndHold() const {
+  if (nsSliderFrame* sliderFrame = GetSliderFrame(mVScrollbarBox)) {
+    if (sliderFrame->ClickAndHoldActive()) {
+      return true;
+    }
+  }
+
+  if (nsSliderFrame* sliderFrame = GetSliderFrame(mHScrollbarBox)) {
+    return sliderFrame->ClickAndHoldActive();
+  }
+
+  return false;
+}
+
 void ScrollContainerFrame::SetTransformingByAPZ(bool aTransforming) {
   if (mTransformingByAPZ == aTransforming) {
     return;
@@ -2255,7 +2309,7 @@ void ScrollContainerFrame::SetTransformingByAPZ(bool aTransforming) {
     ScrollbarActivityStarted();
   } else {
     ScrollbarActivityStopped();
-    PostScrollEndEvent();
+    PostOrDeferScrollEndEvent();
   }
   if (!css::TextOverflow::HasClippedTextOverflow(this) ||
       css::TextOverflow::HasBlockEllipsis(mScrolledFrame)) {
@@ -2282,9 +2336,19 @@ void ScrollContainerFrame::CompleteAsyncScroll(
   if (!weakFrame.IsAlive()) {
     return;
   }
+
+  nsPoint finalPos = GetScrollPosition();
+
+  SCROLLEND_LOG(
+      "%s: start=%s destination=%s final=%s "
+      "is-handled-by-apz=%s",
+      __FUNCTION__, ToString(aStartPosition).c_str(),
+      ToString(mDestination).c_str(), ToString(finalPos).c_str(),
+      !isNotHandledByApz ? "true" : "false");
+
   // We are done scrolling, set our destination to wherever we actually ended
   // up scrolling to.
-  mDestination = GetScrollPosition();
+  mDestination = finalPos;
   // Post a `scrollend` event for scrolling not handled by APZ, including:
   //
   //  - programmatic instant scrolls
@@ -2296,7 +2360,7 @@ void ScrollContainerFrame::CompleteAsyncScroll(
   // The scrollend event should not be fired for a scroll that does not
   // result in a scroll position change.
   if (isNotHandledByApz && scrollPositionChanged) {
-    PostScrollEndEvent();
+    PostOrDeferScrollEndEvent();
   }
 }
 
@@ -2444,9 +2508,12 @@ void ScrollContainerFrame::ScrollToWithOrigin(nsPoint aScrollPosition,
   if (aParams.IsInstant()) {
     // Asynchronous scrolling is not allowed, so we'll kill any existing
     // async-scrolling process and do an instant scroll.
+    AutoWeakFrame weakFrame(this);
     CompleteAsyncScroll(GetScrollPosition(), range, std::move(snapTargetIds),
                         aParams.mOrigin);
-    mApzSmoothScrollDestination = Nothing();
+    if (weakFrame.IsAlive()) {
+      mApzSmoothScrollDestination = Nothing();
+    }
     return;
   }
 
@@ -3190,19 +3257,12 @@ void ScrollContainerFrame::ScrollToImpl(
     }
   }
 
-  if (ChildrenHavePerspective()) {
+  if (ChildrenHavePerspective() && RecomputePerspectiveChildrenOverflow(this)) {
     // The overflow areas of descendants may depend on the scroll position,
     // so ensure they get updated.
-
     // First we recompute the overflow areas of the transformed children
     // that use the perspective. FinishAndStoreOverflow only calls this
     // if the size changes, so we need to do it manually.
-    RecomputePerspectiveChildrenOverflow(this);
-
-    // Update the overflow for the scrolled frame to take any changes from the
-    // children into account.
-    mScrolledFrame->UpdateOverflow();
-
     // Update the overflow for the outer so that we recompute scrollbars.
     UpdateOverflow();
   }
@@ -4098,7 +4158,7 @@ void ScrollContainerFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
         nsDisplaySolidColor* color = MakeDisplayItem<nsDisplaySolidColor>(
             aBuilder, this,
             dirtyRect + aBuilder->GetCurrentFrameOffsetToReferenceFrame(),
-            NS_RGBA(0, 0, 255, 64), false);
+            NS_RGBA(0, 0, 255, 64));
         if (color) {
           color->SetOverrideZIndex(INT32_MAX);
           set.PositionedDescendants()->AppendToTop(color);
@@ -4968,7 +5028,7 @@ void ScrollContainerFrame::ScrollByCSSPixelsInternal(
   // 'this' might be destroyed here
 }
 
-void ScrollContainerFrame::ScrollSnap(ScrollMode aMode) {
+bool ScrollContainerFrame::ScrollSnap(ScrollMode aMode) {
   float flingSensitivity =
       StaticPrefs::layout_css_scroll_snap_prediction_sensitivity();
   int maxVelocity =
@@ -4982,10 +5042,10 @@ void ScrollContainerFrame::ScrollSnap(ScrollMode aMode) {
   predictedOffset.Clamp(maxOffset);
   nsPoint pos = GetScrollPosition();
   nsPoint destinationPos = pos + predictedOffset;
-  ScrollSnap(destinationPos, aMode);
+  return ScrollSnap(destinationPos, aMode);
 }
 
-void ScrollContainerFrame::ScrollSnap(const nsPoint& aDestination,
+bool ScrollContainerFrame::ScrollSnap(const nsPoint& aDestination,
                                       ScrollMode aMode) {
   nsRect scrollRange = GetLayoutScrollRange();
   nsPoint pos = GetScrollPosition();
@@ -5005,7 +5065,9 @@ void ScrollContainerFrame::ScrollSnap(const nsPoint& aDestination,
         destination, nullptr /* range */,
         ScrollOperationParams{aMode, ScrollOrigin::Other,
                               std::move(snapDestination->mTargetIds)});
+    return true;
   }
+  return false;
 }
 
 nsSize ScrollContainerFrame::GetLineScrollAmount() const {
@@ -5124,15 +5186,15 @@ static nsSize GetScrollPortSizeExcludingHeadersAndFooters(
 }
 
 nsSize ScrollContainerFrame::GetPageScrollAmount() const {
-  nsSize effectiveScrollPortSize;
+  nsSize effectiveScrollPortSize = GetVisualOptimalViewingRect().Size();
 
-  if (GetVisualViewportSize() != mScrollPort.Size()) {
-    // We want to use the visual viewport size if one is set.
-    // The headers/footers adjustment is too complicated to do if there is a
-    // visual viewport that differs from the layout viewport, this is probably
-    // okay.
-    effectiveScrollPortSize = GetVisualViewportSize();
-  } else {
+  // We want to use the visual viewport size if one is set.
+  // The headers/footers adjustment is too complicated to do if there is a
+  // visual viewport that differs from the layout viewport, this is probably
+  // okay.
+  // We also assume that if scroll-padding is in use, the author knows what
+  // they're doing and we don't need to auto-account for sticky / fixed stuff.
+  if (effectiveScrollPortSize == mScrollPort.Size()) {
     // Reduce effective scrollport height by the height of any
     // fixed-pos/sticky-pos headers or footers
     effectiveScrollPortSize = GetScrollPortSizeExcludingHeadersAndFooters(
@@ -5350,9 +5412,35 @@ nsresult ScrollContainerFrame::FireScrollPortEvent() {
   return EventDispatcher::Dispatch(target, presContext, &event);
 }
 
+void ScrollContainerFrame::PostOrDeferScrollEndEvent() {
+  bool isInScrollbarButtonClickAndHold =
+      (mVScrollbarBox ? mVScrollbarBox->GetButtonScrollDirection() : false) ||
+      (mHScrollbarBox ? mHScrollbarBox->GetButtonScrollDirection() : false);
+  bool isInScrollbarClickAndHold =
+      SliderFrameInClickAndHold() || isInScrollbarButtonClickAndHold;
+
+  SCROLLEND_LOG("%s: is-in-click-and-hold=%s", __FUNCTION__,
+                isInScrollbarClickAndHold ? "true" : "false");
+  if (!isInScrollbarClickAndHold) {
+    PostScrollEndEvent();
+  } else {
+    mScrollbarClickAndHoldScrollendPending = true;
+  }
+}
+
 void ScrollContainerFrame::PostScrollEndEvent() {
   if (mScrollEndEvent) {
     return;
+  }
+
+  // If this is the rood document and is not an iframe, we may need to post
+  // a scrollend event to the VisualViewport.
+  if (mIsRoot && PresContext()->IsRootContentDocumentCrossProcess() &&
+      PresShell()->IsVisualViewportOffsetSet()) {
+    if (auto* window = nsGlobalWindowInner::Cast(
+            PresContext()->Document()->GetInnerWindow())) {
+      window->VisualViewport()->PostScrollEndEvent();
+    }
   }
 
   // The ScrollEndEvent constructor registers itself.
@@ -5497,7 +5585,9 @@ auto ScrollContainerFrame::GetNeededAnonymousContent() const
     result += AnonymousContentType::HorizontalScrollbar;
     result += AnonymousContentType::VerticalScrollbar;
     // If scrollbar-width is none, don't generate scrollbars.
-  } else if (StyleUIReset()->ScrollbarWidth() != StyleScrollbarWidth::None) {
+    // NOTE: This is a non-root case so that we can use this container's
+    // mComputedStyle here.
+  } else if (ScrollbarWidth(mComputedStyle) != StyleScrollbarWidth::None) {
     ScrollStyles styles = GetScrollStyles();
     if (styles.mHorizontal != StyleOverflow::Hidden) {
       result += AnonymousContentType::HorizontalScrollbar;
@@ -5636,9 +5726,71 @@ void ScrollContainerFrame::AppendAnonymousContentTo(
   }
 }
 
+enum class WebkitScrollbarSize { Auto, Zero, NonZero };
+
+static std::pair<WebkitScrollbarSize, WebkitScrollbarSize>
+GetWebkitScrollbarWidthAndHeight(
+    const RefPtr<ComputedStyle>& aWebKitScrollbarStyle) {
+  MOZ_ASSERT(aWebKitScrollbarStyle);
+  const auto webkitScrollbarWidth =
+      aWebKitScrollbarStyle->StylePosition()->GetWidth(
+          // scrollbar elements are not affected by anchor positioning.
+          AnchorPosResolutionParams{nullptr, StylePositionProperty::Static});
+  const auto webkitScrollbarHeight =
+      aWebKitScrollbarStyle->StylePosition()->GetHeight(
+          // scrollbar elements are not affected by anchor positioning.
+          AnchorPosResolutionParams{nullptr, StylePositionProperty::Static});
+  auto toSize = [](const AnchorResolvedSize& size) {
+    if (!size->IsLengthPercentage()) {
+      return WebkitScrollbarSize::Auto;
+    }
+    // On Blink/WebKit %-unit size is treated as 0.
+    if (size->AsLengthPercentage().IsLength() &&
+        !size->AsLengthPercentage().AsLength().IsZero()) {
+      return WebkitScrollbarSize::NonZero;
+    }
+    return WebkitScrollbarSize::Zero;
+  };
+  return {toSize(webkitScrollbarWidth), toSize(webkitScrollbarHeight)};
+}
+
 void ScrollContainerFrame::DidSetComputedStyle(
     ComputedStyle* aOldComputedStyle) {
   nsContainerFrame::DidSetComputedStyle(aOldComputedStyle);
+
+  // Resolve styles for ::-webkit-scrollbar pseudo element
+  if (StaticPrefs::layout_css_fake_webkit_scrollbar_enabled()) {
+    mWebKitScrollbarStyle = PresContext()->StyleSet()->ProbePseudoElementStyle(
+        *GetContent()->AsElement(), PseudoStyleType::WebkitScrollbar, nullptr,
+        mComputedStyle);
+  }
+
+  const bool disableOverlayScrollbars =
+      [&](const RefPtr<ComputedStyle>& style) {
+        // If there's any ::webkit-scrollbar for this container, then check
+        // whether there exits non-zero width or height value.
+        if (!style) {
+          return false;
+        }
+        if (style->StyleDisplay()->mDisplay == StyleDisplay::None) {
+          return false;
+        }
+        auto [width, height] = GetWebkitScrollbarWidthAndHeight(style);
+        return width == WebkitScrollbarSize::NonZero ||
+               height == WebkitScrollbarSize::NonZero;
+      }(mWebKitScrollbarStyle);
+
+  if (mForceDisableOverlayScrollbars != disableOverlayScrollbars) {
+    mForceDisableOverlayScrollbars = disableOverlayScrollbars;
+    MarkScrollbarsDirtyForReflow();
+
+    if (mForceDisableOverlayScrollbars) {
+      DisableOverlayScrollbars();
+    } else {
+      EnableOverlayScrollbars();
+    }
+  }
+
   if (aOldComputedStyle && !mIsRoot &&
       StyleDisplay()->mScrollSnapType !=
           aOldComputedStyle->StyleDisplay()->mScrollSnapType) {
@@ -5755,6 +5907,34 @@ void ScrollContainerFrame::ScrollbarCurPosChanged(bool aDoScroll) {
         ScrollOperationParams{ScrollMode::Instant, ScrollOrigin::Scrollbars});
   }
   // 'this' might be destroyed here
+}
+
+void ScrollContainerFrame::DisableOverlayScrollbars() {
+  nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+      "ScrollContainerFrame::DisableOverlayScrollbars",
+      [weakFrame = std::make_unique<WeakFrame>(this)] {
+        if (!weakFrame->IsAlive()) {
+          return;
+        }
+        auto* self = static_cast<ScrollContainerFrame*>(weakFrame->GetFrame());
+        if (self->mScrollbarActivity) {
+          self->mScrollbarActivity->ActivityStarted();
+        }
+      }));
+}
+
+void ScrollContainerFrame::EnableOverlayScrollbars() {
+  nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+      "ScrollContainerFrame::EnableOverlayScrollbars",
+      [weakFrame = std::make_unique<WeakFrame>(this)] {
+        if (!weakFrame->IsAlive()) {
+          return;
+        }
+        auto* self = static_cast<ScrollContainerFrame*>(weakFrame->GetFrame());
+        if (self->mScrollbarActivity) {
+          self->mScrollbarActivity->ActivityStopped();
+        }
+      }));
 }
 
 /* ============= Scroll events ========== */
@@ -6523,9 +6703,7 @@ void ScrollContainerFrame::LayoutScrollbars(ScrollReflowInput& aState,
     // If a resizer is present, get its size.
     //
     // TODO(emilio): Should this really account for scrollbar-width?
-    auto scrollbarWidth = nsLayoutUtils::StyleForScrollbar(this)
-                              ->StyleUIReset()
-                              ->ScrollbarWidth();
+    auto scrollbarWidth = ScrollbarWidth();
     const nscoord scrollbarSize =
         GetNonOverlayScrollbarSize(pc, scrollbarWidth);
     ReflowInput resizerRI(pc, aState.mReflowInput, mResizerBox,
@@ -7624,7 +7802,43 @@ ScrollContainerFrame::GetScrollSnapAlignFor(const nsIFrame* aFrame) const {
 }
 
 bool ScrollContainerFrame::UseOverlayScrollbars() const {
-  return PresContext()->UseOverlayScrollbars();
+  if (!PresContext()->UseOverlayScrollbars()) {
+    return false;
+  }
+  return !mForceDisableOverlayScrollbars;
+}
+
+StyleScrollbarWidth ScrollContainerFrame::ScrollbarWidth(
+    const ComputedStyle* aStyle) const {
+  auto PrefGatedScrollbarWidth =
+      [](StyleScrollbarWidth aComputedScrollbarWidth) {
+        if (MOZ_UNLIKELY(
+                StaticPrefs::layout_css_scrollbar_width_thin_disabled()) &&
+            aComputedScrollbarWidth == StyleScrollbarWidth::Thin) {
+          return StyleScrollbarWidth::Auto;
+        }
+        return aComputedScrollbarWidth;
+      };
+
+  const ComputedStyle* style =
+      aStyle ? aStyle : nsLayoutUtils::StyleForScrollbar(this);
+  auto scrollbarWidth = style->StyleUIReset()->ComputedScrollbarWidth();
+  if (!mWebKitScrollbarStyle ||
+      (mWebKitScrollbarStyle->StyleDisplay()->mDisplay != StyleDisplay::None &&
+       [&] {
+         auto [w, h] = GetWebkitScrollbarWidthAndHeight(mWebKitScrollbarStyle);
+         return w != WebkitScrollbarSize::Zero ||
+                h != WebkitScrollbarSize::Zero;
+       }()) ||
+      // On Chrome even if `display: none` or `width: 0; height: 0` is specified
+      // on `::-webkit-scrollbar`, non auto `scrollbar-color` or non auto
+      // `scrollbar-width` clobbers it.
+      scrollbarWidth != StyleScrollbarWidth::Auto ||
+      style->StyleUI()->HasCustomScrollbars()) {
+    return PrefGatedScrollbarWidth(scrollbarWidth);
+  }
+
+  return StyleScrollbarWidth::None;
 }
 
 bool ScrollContainerFrame::DragScroll(WidgetEvent* aEvent) {
@@ -7685,21 +7899,6 @@ bool ScrollContainerFrame::DragScroll(WidgetEvent* aEvent) {
   }
 
   return willScroll;
-}
-
-static nsSliderFrame* GetSliderFrame(nsIFrame* aScrollbarFrame) {
-  if (!aScrollbarFrame) {
-    return nullptr;
-  }
-
-  for (const auto& childList : aScrollbarFrame->ChildLists()) {
-    for (nsIFrame* frame : childList.mList) {
-      if (nsSliderFrame* sliderFrame = do_QueryFrame(frame)) {
-        return sliderFrame;
-      }
-    }
-  }
-  return nullptr;
 }
 
 static void AsyncScrollbarDragInitiated(uint64_t aDragBlockId,

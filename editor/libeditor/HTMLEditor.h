@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -3402,24 +3401,41 @@ class HTMLEditor final : public EditorBase,
   MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult> PrepareToInsertLineBreak(
       LineBreakType aLineBreakType, const EditorDOMPoint& aPointToInsert);
 
+  enum class PreservePreformattedLineBreak : bool { No, Yes };
+
   /**
    * If unnecessary line break is there immediately after aPoint, this deletes
    * the line break.  Note that unnecessary line break means that the line break
    * is a padding line break for empty line immediately before a block boundary
    * and it's not a placeholder of ancestor inline elements.
    *
-   * @param aNextOrAfterModifiedPoint   If you inserted something, this should
-   *                                    be next point or after the inserted
-   *                                    content.
-   *                                    If you deleted something, this should be
-   *                                    end of the deleted range.
-   * @param aEditingHost                The editing host containing
-   * aNextOrAfterModifiedPoint.
+   * @param aNextOrAfterModifiedPoint
+   *                            If you inserted something, this should be next
+   *                            point or after the inserted content. If you
+   *                            deleted something, this should be end of the
+   *                            deleted range.
+   * @param aPreservePreformattedLineBreak
+   *                            Whether this method should preserve preformatted
+   *                            linefeed or not. If "Yes", this will delete only
+   *                            when the unnecessary line break is a <br>.
+   * @param aPaddingForEmptyBlock
+   *                            Treat the line break for empty block is
+   *                            unnecessary or not. If this is set to
+   *                            "Unnecessary", preformatted line break will be
+   *                            deleted if it's a padding for empty block and
+   *                            aPreservePreformattedLineBreak is "Yes".
+   *                            This should be "Significant" if you use this
+   *                            after handling the edit action. So, you can use
+   *                            "Unnecessary" only when you are calling this
+   *                            before handling the edit action.
+   * @param aEditingHost        The editing host containing
+   *                            aNextOrAfterModifiedPoint.
    */
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
   EnsureNoFollowingUnnecessaryLineBreak(
       const EditorDOMPoint& aNextOrAfterModifiedPoint,
-      const Element& aEditingHost);
+      PreservePreformattedLineBreak aPreservePreformattedLineBreak,
+      PaddingForEmptyBlock aPaddingForEmptyBlock, const Element& aEditingHost);
 
   /**
    * IndentAsSubAction() indents the content around Selection.
@@ -3947,6 +3963,10 @@ class HTMLEditor final : public EditorBase,
       nsIPrincipal* aSourcePrincipal, const EditorDOMPoint& aDroppedAt,
       DeleteSelectedContent aDeleteSelectedContent,
       const Element& aEditingHost);
+
+  MOZ_CAN_RUN_SCRIPT nsresult InsertURLAsLinkInternal(
+      const nsAString& aURL, const EditorDOMPoint& aPointToInsert,
+      DeleteSelectedContent aDeleteSelectedContent);
 
   static HavePrivateHTMLFlavor DataTransferOrClipboardHasPrivateHTMLFlavor(
       DataTransfer* aDataTransfer, nsIClipboard* clipboard);

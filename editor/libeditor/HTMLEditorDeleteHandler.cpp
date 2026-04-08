@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=2 sw=2 et tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -766,7 +764,8 @@ Result<CaretPoint, nsresult> HTMLEditor::DeleteRangesWithTransaction(
           AutoTrackDOMPoint trackPointToInsertLineBreak(
               RangeUpdaterRef(), &pointToInsertLineBreak);
           nsresult rv = EnsureNoFollowingUnnecessaryLineBreak(
-              pointToInsertLineBreak, *editingHost);
+              pointToInsertLineBreak, PreservePreformattedLineBreak::No,
+              PaddingForEmptyBlock::Significant, *editingHost);
           if (NS_FAILED(rv)) {
             NS_WARNING(
                 "HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
@@ -1970,7 +1969,8 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteAtomicContent(
     AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
                                            &pointToPutCaret);
     nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
-        pointToPutCaret, aEditingHost);
+        pointToPutCaret, PreservePreformattedLineBreak::No,
+        PaddingForEmptyBlock::Significant, aEditingHost);
     if (NS_FAILED(rv)) {
       NS_WARNING("HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
       return Err(rv);
@@ -3161,7 +3161,8 @@ HTMLEditor::AutoDeleteRangesHandler::ComputeRangesToDeleteNonCollapsedRanges(
   if (aRangesToDelete.Ranges().Length() == 1) {
     Result<EditorRawDOMRange, nsresult> result = ExtendOrShrinkRangeToDelete(
         aHTMLEditor, aRangesToDelete.LimitersAndCaretDataRef(),
-        EditorRawDOMRange(aRangesToDelete.FirstRangeRef()), aEditingHost);
+        EditorRawDOMRange(aRangesToDelete.FirstRangeRef()),
+        aSelectionWasCollapsed, ComputeRangeFor::GetTargetRanges, aEditingHost);
     if (MOZ_UNLIKELY(result.isErr())) {
       NS_WARNING(
           "AutoDeleteRangesHandler::ExtendOrShrinkRangeToDelete() failed");
@@ -3270,7 +3271,9 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteNonCollapsedRanges(
   if (aRangesToDelete.Ranges().Length() == 1) {
     Result<EditorRawDOMRange, nsresult> result = ExtendOrShrinkRangeToDelete(
         aHTMLEditor, aRangesToDelete.LimitersAndCaretDataRef(),
-        EditorRawDOMRange(aRangesToDelete.FirstRangeRef()), aEditingHost);
+        EditorRawDOMRange(aRangesToDelete.FirstRangeRef()),
+        aSelectionWasCollapsed, ComputeRangeFor::ToDeleteTheRange,
+        aEditingHost);
     if (MOZ_UNLIKELY(result.isErr())) {
       NS_WARNING(
           "AutoDeleteRangesHandler::ExtendOrShrinkRangeToDelete() failed");
@@ -3628,7 +3631,17 @@ bool HTMLEditor::AutoDeleteRangesHandler::AutoBlockElementsJoiner::
     }
   }
 
-  mMode = Mode::DeleteNonCollapsedRange;
+  if (EditorRawDOMPoint::After(*mRightContent)
+          .EqualsOrIsBefore(EditorRawDOMPoint(aRangeToDelete.EndRef()))) {
+    // If mRightContent is completely in the range to delete, we won't join
+    // mLeftContent and mRightContent which mRightContent will be deleted. So,
+    // we need just to delete all things in the range.
+    mMode = Mode::DeleteContentInRange;
+  } else {
+    // Otherwise, we need to delete the content in the range and then, join
+    // mLeftContent and mRightContent.
+    mMode = Mode::DeleteNonCollapsedRange;
+  }
   return true;
 }
 
@@ -4016,8 +4029,7 @@ HTMLEditor::AutoDeleteRangesHandler::AutoBlockElementsJoiner::
     return Err(rv);
   }
   iter.AppendAllNodesToArray(arrayOfTopChildren);
-  return NeedsToJoinNodesAfterDeleteNodesEntirelyInRangeButKeepTableStructure(
-      aHTMLEditor, arrayOfTopChildren, aSelectionWasCollapsed);
+  return NeedsToJoinNodesAfterDeleteNodesEntirelyInRange();
 }
 
 Result<DeleteRangeResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
@@ -4061,44 +4073,29 @@ Result<DeleteRangeResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
 }
 
 bool HTMLEditor::AutoDeleteRangesHandler::AutoBlockElementsJoiner::
-    NeedsToJoinNodesAfterDeleteNodesEntirelyInRangeButKeepTableStructure(
-        const HTMLEditor& aHTMLEditor,
-        const nsTArray<OwningNonNull<nsIContent>>& aArrayOfContents,
-        AutoDeleteRangesHandler::SelectionWasCollapsed aSelectionWasCollapsed)
-        const {
+    NeedsToJoinNodesAfterDeleteNodesEntirelyInRange() const {
   switch (mMode) {
     case Mode::DeletePrecedingLinesAndContentInRange:
     case Mode::DeleteBRElement:
     case Mode::DeletePrecedingBRElementOfBlock:
     case Mode::DeletePrecedingPreformattedLineBreak:
+      // We want to delete a line but preseve the block structure around the
+      // selection.
       return false;
-    default:
+    case Mode::DeleteNonCollapsedRange:
+      // We must move the first line of mRightContent. If we'll delete
+      // mRightContent instead, we should handle the case in the
+      // DeleteContentInRange mode.
+      return true;
+    case Mode::DeleteContentInRange:
+    case Mode::JoinBlocksInSameParent:
+    case Mode::JoinCurrentBlock:
+    case Mode::JoinOtherBlock:
+    case Mode::NotInitialized:
+      MOZ_ASSERT_UNREACHABLE("Shouldn't be handled in this path");
       break;
   }
-
-  // If original selection was collapsed, we need always to join the nodes
-  // because the user must intent to delete the block boundaries.
-  if (aSelectionWasCollapsed ==
-      AutoDeleteRangesHandler::SelectionWasCollapsed::No) {
-    return true;
-  }
-  // Otherwise, i.e., the range was extended by ourselves to consider the
-  // deleting range before/after the caret, we want to delete only visible
-  // things in the range if there are some visible contents in the range. Or
-  // join the blocks at start/end points if there is no visible things.
-  if (aArrayOfContents.IsEmpty()) {
-    return true;
-  }
-  for (const OwningNonNull<nsIContent>& content : aArrayOfContents) {
-    // We want to treat non-editable nodes are invisible here.
-    if (!HTMLEditUtils::IsSimplyEditableNode(content)) {
-      continue;
-    }
-    if (!NodeIsInvisibleOrLineBreakFollowedByBlockBoundary(content)) {
-      return false;
-    }
-  }
-  return true;
+  return false;
 }
 
 Result<DeleteRangeResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
@@ -4552,22 +4549,6 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
       aSelectionWasCollapsed == SelectionWasCollapsed::Yes &&
       nsIEditor::DirectionIsBackspace(aDirectionAndAmount);
 
-  AutoTArray<OwningNonNull<nsIContent>, 10> arrayOfTopChildren;
-  {
-    DOMSubtreeIterator iter;
-    nsresult rv = iter.Init(aRangeToDelete);
-    if (NS_FAILED(rv)) {
-      NS_WARNING("DOMSubtreeIterator::Init() failed");
-      return Err(rv);
-    }
-    iter.AppendAllNodesToArray(arrayOfTopChildren);
-  }
-
-  const bool needsToJoinLater =
-      NeedsToJoinNodesAfterDeleteNodesEntirelyInRangeButKeepTableStructure(
-          aHTMLEditor, arrayOfTopChildren, aSelectionWasCollapsed);
-  const bool joinInclusiveAncestorBlockElements =
-      !isDeletingLineBreak && needsToJoinLater;
   const bool maybeDeleteOnlyFollowingContentOfFollowingBlockBoundary =
       !isDeletingLineBreak &&
       mMode != Mode::DeletePrecedingLinesAndContentInRange &&
@@ -4583,7 +4564,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     // If we're joining blocks: if deleting forward the selection should be
     // collapsed to the end of the selection, if deleting backward the selection
     // should be collapsed to the beginning of the selection.
-    if (joinInclusiveAncestorBlockElements) {
+    if (NeedsToJoinNodesAfterDeleteNodesEntirelyInRange()) {
       return nsIEditor::DirectionIsDelete(aDirectionAndAmount)
                  ? PutCaretTo::EndOfRange
                  : PutCaretTo::StartOfRange;
@@ -4601,6 +4582,17 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
   auto deleteContentResultOrError =
       [&]() MOZ_NEVER_INLINE_DEBUG MOZ_CAN_RUN_SCRIPT
       -> Result<DeleteRangeResult, nsresult> {
+    AutoTArray<OwningNonNull<nsIContent>, 10> arrayOfTopChildren;
+    {
+      DOMSubtreeIterator iter;
+      nsresult rv = iter.Init(aRangeToDelete);
+      if (NS_FAILED(rv)) {
+        NS_WARNING("DOMSubtreeIterator::Init() failed");
+        return Err(rv);
+      }
+      iter.AppendAllNodesToArray(arrayOfTopChildren);
+    }
+
     OwningNonNull<nsRange> rangeToDelete(aRangeToDelete);
     AutoTrackDOMRange trackRangeToDelete(aHTMLEditor.RangeUpdaterRef(),
                                          &rangeToDelete);
@@ -4664,7 +4656,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
   DeleteRangeResult deleteContentResult = deleteContentResultOrError.unwrap();
   // HandleDeleteLineBreak() should handle the new caret position by itself.
   if (isDeletingLineBreak) {
-    MOZ_ASSERT(!joinInclusiveAncestorBlockElements);
+    MOZ_ASSERT(!NeedsToJoinNodesAfterDeleteNodesEntirelyInRange());
     deleteContentResult.IgnoreCaretPointSuggestion();
     return EditActionResult::HandledResult();
   }
@@ -4672,7 +4664,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
   auto moveFirstLineResultOrError =
       [&]() MOZ_NEVER_INLINE_DEBUG MOZ_CAN_RUN_SCRIPT
       -> Result<DeleteRangeResult, nsresult> {
-    if (!joinInclusiveAncestorBlockElements) {
+    if (!NeedsToJoinNodesAfterDeleteNodesEntirelyInRange()) {
       return DeleteRangeResult::IgnoredResult();
     }
 
@@ -4680,10 +4672,6 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     MOZ_ASSERT(mLeftContent->IsElement());
     MOZ_ASSERT(mRightContent);
     MOZ_ASSERT(mRightContent->IsElement());
-
-    if (!joinInclusiveAncestorBlockElements) {
-      return DeleteRangeResult::IgnoredResult();
-    }
 
     // Finally, join elements containing either mLeftContent or mRightContent.
     // XXX This may join only inline elements despite its name.
@@ -4811,7 +4799,8 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
                 return NS_OK;
               }
               nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
-                  aPoint, aEditingHost);
+                  aPoint, PreservePreformattedLineBreak::No,
+                  PaddingForEmptyBlock::Significant, aEditingHost);
               NS_WARNING_ASSERTION(
                   NS_SUCCEEDED(rv),
                   "HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
@@ -5092,7 +5081,8 @@ nsresult HTMLEditor::AutoDeleteRangesHandler::DeleteUnnecessaryNodes(
   if (MOZ_LIKELY(range.EndRef().IsInContentNode())) {
     AutoTrackDOMRange trackRange(aHTMLEditor.RangeUpdaterRef(), &range);
     nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
-        range.EndRef(), aEditingHost);
+        range.EndRef(), PreservePreformattedLineBreak::No,
+        PaddingForEmptyBlock::Significant, aEditingHost);
     if (NS_FAILED(rv)) {
       NS_WARNING("HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
       return Err(rv);
@@ -7823,7 +7813,8 @@ HTMLEditor::AutoDeleteRangesHandler::ExtendOrShrinkRangeToDelete(
     const HTMLEditor& aHTMLEditor,
     const LimitersAndCaretData& aLimitersAndCaretData,
     const EditorDOMRangeType& aRangeToDelete,
-    const Element& aEditingHost) const {
+    SelectionWasCollapsed aSelectionWasCollapsed,
+    ComputeRangeFor aComputeRangeFor, const Element& aEditingHost) const {
   MOZ_ASSERT(aHTMLEditor.IsEditActionDataAvailable());
   MOZ_ASSERT(!aRangeToDelete.Collapsed());
   MOZ_ASSERT(aRangeToDelete.IsPositioned());
@@ -8001,11 +7992,11 @@ HTMLEditor::AutoDeleteRangesHandler::ExtendOrShrinkRangeToDelete(
   // If range boundaries are in list element, and the positions are very
   // start/end of first/last list item, we may need to shrink the ranges for
   // preventing to remove only all list item elements.
-  {
+  if (aSelectionWasCollapsed != SelectionWasCollapsed::Yes) {
     EditorRawDOMRange rangeToDeleteListOrLeaveOneEmptyListItem =
         AutoDeleteRangesHandler::
             GetRangeToAvoidDeletingAllListItemsIfSelectingAllOverListElements(
-                rangeToDelete);
+                rangeToDelete, aComputeRangeFor);
     if (rangeToDeleteListOrLeaveOneEmptyListItem.IsPositioned()) {
       rangeToDelete = std::move(rangeToDeleteListOrLeaveOneEmptyListItem);
     }
@@ -8040,7 +8031,8 @@ HTMLEditor::AutoDeleteRangesHandler::ExtendOrShrinkRangeToDelete(
 // static
 EditorRawDOMRange HTMLEditor::AutoDeleteRangesHandler::
     GetRangeToAvoidDeletingAllListItemsIfSelectingAllOverListElements(
-        const EditorRawDOMRange& aRangeToDelete) {
+        const EditorRawDOMRange& aRangeToDelete,
+        ComputeRangeFor aComputeRangeFor) {
   MOZ_ASSERT(aRangeToDelete.IsPositionedAndValid());
 
   auto GetDeepestEditableStartPointOfList = [](Element& aListElement) {
@@ -8080,11 +8072,28 @@ EditorRawDOMRange HTMLEditor::AutoDeleteRangesHandler::
           ? HTMLEditUtils::GetClosestInclusiveAncestorAnyListElement(
                 *aRangeToDelete.StartRef().ContainerAs<nsIContent>())
           : nullptr;
-  Element* const endListElement =
-      aRangeToDelete.EndRef().IsInContentNode()
-          ? HTMLEditUtils::GetClosestInclusiveAncestorAnyListElement(
-                *aRangeToDelete.EndRef().ContainerAs<nsIContent>())
-          : nullptr;
+  Element* const endListElement = [&]() MOZ_NEVER_INLINE_DEBUG -> Element* {
+    // The range may have been extended to after a list element to delete the
+    // list. If so, let's return the list element immediately before the end
+    // boundary.
+    if (nsIContent* const previousSibling =
+            aRangeToDelete.EndRef().GetPreviousSiblingOfChild()) {
+      if (HTMLEditUtils::IsListElement(*previousSibling)) {
+        return previousSibling->AsElement();
+      }
+    }
+    // Otherwise, the range may end almost end of a list element. If so, let's
+    // return the inclusive ancestor list element.
+    if (aRangeToDelete.EndRef().IsInContentNode()) {
+      Element* const listElement =
+          HTMLEditUtils::GetClosestInclusiveAncestorAnyListElement(
+              *aRangeToDelete.EndRef().ContainerAs<nsIContent>());
+      if (listElement) {
+        return listElement;
+      }
+    }
+    return nullptr;
+  }();
   if (!startListElement && !endListElement) {
     return EditorRawDOMRange();
   }
@@ -8189,25 +8198,31 @@ EditorRawDOMRange HTMLEditor::AutoDeleteRangesHandler::
     newRangeToDelete.SetStart(EditorRawDOMPoint(
         deepestStartPointOfStartList.ContainerAs<nsIContent>(), 0u));
   }
-  // If all over the list element at end boundary is selected, and...
+  // If all over the list element is selected, and...
   if (!endListElementIsEmpty && rangeEndsByEndingOfEndList) {
-    // If the range starts before the range at end boundary of the range,
-    // we want to delete the list completely, thus, we should extend the
-    // range to contain the list element.
-    if (aRangeToDelete.StartRef().IsBefore(
-            EditorRawDOMPoint(endListElement, 0u))) {
-      newRangeToDelete.SetEnd(EditorRawDOMPoint::After(*endListElement));
-      MOZ_ASSERT_IF(newRangeToDelete.StartRef().IsSet(),
-                    newRangeToDelete.IsPositionedAndValid());
-    }
-    // Otherwise, if the range starts in the end list element, we shouldn't
-    // delete the list.  Therefore, we should shrink the range to end by end
-    // of the last list item element to avoid to delete all list items.
-    else {
-      newRangeToDelete.SetEnd(EditorRawDOMPoint::AtEndOf(
-          *deepestEndPointOfEndList.ContainerAs<nsIContent>()));
-      MOZ_ASSERT_IF(newRangeToDelete.StartRef().IsSet(),
-                    newRangeToDelete.IsPositionedAndValid());
+    // Let's default to end of the deepest editable point.
+    newRangeToDelete.SetEnd(deepestEndPointOfEndList);
+    MOZ_ASSERT_IF(newRangeToDelete.StartRef().IsSet(),
+                  newRangeToDelete.IsPositionedAndValid());
+    // Then, let's extend the range to select all the sublists if the range
+    // contails all of them if we're deleting the range.
+    if (aComputeRangeFor == ComputeRangeFor::ToDeleteTheRange) {
+      for (Element* const maybeList :
+           deepestEndPointOfEndList.GetContainer()
+               ->InclusiveAncestorsOfType<Element>()) {
+        if (!HTMLEditUtils::IsListElement(*maybeList)) {
+          continue;
+        }
+        if (!aRangeToDelete.StartRef().IsBefore(
+                EditorRawDOMPoint(maybeList, 0u))) {
+          break;
+        }
+        MOZ_ASSERT(maybeList->IsInclusiveDescendantOf(endListElement));
+        // The list is entirely in the range so that let's delete it.
+        newRangeToDelete.SetEnd(EditorRawDOMPoint::After(*maybeList));
+        MOZ_ASSERT_IF(newRangeToDelete.StartRef().IsSet(),
+                      newRangeToDelete.IsPositionedAndValid());
+      }
     }
   }
 

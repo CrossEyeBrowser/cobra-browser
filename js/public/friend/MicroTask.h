@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * vim: set ts=8 sts=4 et sw=4 tw=99:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -115,6 +113,11 @@ JS_PUBLIC_API bool PrependMicroTask(JSContext* cx,
 JS_PUBLIC_API GenericMicroTask DequeueNextMicroTask(JSContext* cx);
 JS_PUBLIC_API GenericMicroTask DequeueNextDebuggerMicroTask(JSContext* cx);
 JS_PUBLIC_API GenericMicroTask DequeueNextRegularMicroTask(JSContext* cx);
+
+// Peek at the next MicroTask without removing it from the queue.
+// Returns JS::NullValue() if there are no MicroTasks.
+// Checks debugger queue first, then regular queue.
+JS_PUBLIC_API GenericMicroTask PeekNextMicroTask(JSContext* cx);
 
 // Returns true if there are -any- microtasks pending in the queue.
 JS_PUBLIC_API bool HasAnyMicroTasks(JSContext* cx);

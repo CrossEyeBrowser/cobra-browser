@@ -10,10 +10,10 @@
 use crate::context::QuirksMode;
 use crate::data::ElementData;
 use crate::derives::*;
+use crate::device::Device;
 use crate::dom::{TDocument, TElement, TNode};
 use crate::invalidation::element::element_wrapper::{ElementSnapshot, ElementWrapper};
 use crate::invalidation::element::restyle_hints::RestyleHint;
-use crate::media_queries::Device;
 use crate::selector_map::PrecomputedHashSet;
 use crate::selector_parser::{SelectorImpl, Snapshot, SnapshotMap};
 use crate::shared_lock::SharedRwLockReadGuard;
@@ -642,7 +642,7 @@ impl StylesheetInvalidationSet {
                 return self.invalidate_fully();
             },
             Document(..) | Import(..) | Media(..) | Supports(..) | Container(..)
-            | LayerBlock(..) | StartingStyle(..) => {
+            | LayerBlock(..) | StartingStyle(..) | AppearanceBase(..) => {
                 // Do nothing, relevant nested rules are visited as part of rule iteration.
             },
             FontFace(..) => {
@@ -680,6 +680,9 @@ impl StylesheetInvalidationSet {
             PositionTry(..) => {
                 // @position-try changes doesn't change style-time information (only layout
                 // information) and is handled by invalidate_position_try. So do nothing.
+            },
+            ViewTransition(..) => {
+                // @view-transition doesn't affect element styles.
             },
             CustomMedia(..) => {
                 // @custom-media might be referenced by other rules which we can't get a hand on in

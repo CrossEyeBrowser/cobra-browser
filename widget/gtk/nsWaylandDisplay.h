@@ -1,6 +1,3 @@
-/* -*- Mode: C; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim:expandtab:shiftwidth=2:tabstop=2:
- */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -46,7 +43,11 @@ class nsWaylandDisplay {
  public:
   // Create nsWaylandDisplay object on top of native Wayland wl_display
   // connection.
+  // Split nsWaylandDisplay setup to constructor & Init() call
+  // to allow calls WaylandDisplayGet() from Init() where we query
+  // wayland display setup.
   explicit nsWaylandDisplay(wl_display* aDisplay);
+  void Init();
 
   static uint32_t GetLastEventSerial();
   wl_display* GetDisplay() { return mDisplay; };
@@ -130,10 +131,15 @@ class nsWaylandDisplay {
   bool HasDMABufFeedback() const { return mDmabufIsFeedback; }
   void EnsureDMABufFormats();
 
+  void SetFixes(wl_fixes* aFixes);
+  wl_fixes* GetFixes() const { return mFixes; }
+
   static void AsyncRoundtripCallback(void* aData, wl_callback* aCallback,
                                      uint32_t aTime);
   void RequestAsyncRoundtrip();
   void WaitForAsyncRoundtrips();
+
+  void RefreshScreens();
 
   struct MonitorConfig {
     int id = 0;
@@ -141,6 +147,7 @@ class nsWaylandDisplay {
     int y = 0;
     int pixelWidth = 0;
     int pixelHeight = 0;
+    bool pendingChanges = true;
     explicit MonitorConfig(int aId) : id(aId) {}
   };
 
@@ -154,6 +161,7 @@ class nsWaylandDisplay {
  private:
   PRThread* mThreadId = nullptr;
   wl_registry* mRegistry = nullptr;
+  wl_fixes* mFixes = nullptr;
   wl_display* mDisplay = nullptr;
   wl_compositor* mCompositor = nullptr;
   wl_subcompositor* mSubcompositor = nullptr;

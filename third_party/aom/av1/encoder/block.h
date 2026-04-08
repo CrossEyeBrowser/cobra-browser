@@ -441,6 +441,11 @@ typedef struct {
    */
   int use_default_intra_tx_type;
 
+  /*! Whether to limit the intra transform search type to the ones in the table
+   * av1_derived_intra_tx_used_flag[INTRA_MODES].
+   */
+  int use_derived_intra_tx_type_set;
+
   /*! Probability threshold used for conditionally forcing tx type*/
   int default_inter_tx_type_prob_thresh;
 
@@ -868,6 +873,9 @@ typedef struct SetOffsetsLoc {
 
 /*!\endcond */
 
+//! Maximum number of estimated RD Cost records for compound average.
+#define TOP_COMP_AVG_EST_RD_COUNT 2
+
 /*! \brief Encoder's parameters related to the current coding block.
  *
  * This struct contains most of the information the encoder needs to encode the
@@ -952,6 +960,11 @@ typedef struct macroblock {
    *   prediction.
    */
   uint8_t *tmp_pred_bufs[2];
+
+  /*!
+   *  Buffer used for upsampled prediction.
+   */
+  uint8_t *upsample_pred;
   /**@}*/
 
   /*****************************************************************************
@@ -1408,6 +1421,9 @@ typedef struct macroblock {
    * first-pass when superblock is searched twice consecutively.
    */
   struct SB_FIRST_PASS_STATS *sb_fp_stats;
+
+  /*!\brief Array of best estimated RD Costs of compound average. */
+  int64_t top_comp_avg_est_rd[TOP_COMP_AVG_EST_RD_COUNT];
 
 #if CONFIG_PARTITION_SEARCH_ORDER
   /*!\brief Pointer to RD_STATS structure to be used in

@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -816,12 +814,7 @@ FrameChildListID nsLayoutUtils::GetChildListNameFor(nsIFrame* aChildFrame) {
       id = FrameChildListID::OverflowContainers;
     }
   } else {
-    LayoutFrameType childType = aChildFrame->Type();
-    if (LayoutFrameType::TableColGroup == childType) {
-      id = FrameChildListID::ColGroup;
-    } else {
-      id = FrameChildListID::Principal;
-    }
+    id = FrameChildListID::Principal;
   }
 
 #ifdef DEBUG
@@ -2761,7 +2754,7 @@ static void DumpBeforePaintDisplayList(UniquePtr<std::stringstream>& aStream,
       string.AppendInt(paintCount);
     }
     string.AppendLiteral(".html");
-    gfxUtils::sDumpPaintFile = fopen(string.BeginReading(), "w");
+    gfxUtils::sDumpPaintFile = fopen(string.get(), "w");
   } else {
     gfxUtils::sDumpPaintFile = stderr;
   }
@@ -7299,7 +7292,7 @@ SurfaceFromElementResult nsLayoutUtils::SurfaceFromElement(
       result.mAlphaType = gfxAlphaType::Premult;
     }
   } else {
-    result.mDrawInfo.mImgContainer = imgContainer;
+    result.mDrawInfo.mImgContainer = std::move(imgContainer);
     result.mDrawInfo.mWhichFrame = whichFrame;
     result.mDrawInfo.mDrawingFlags = frameFlags;
   }
@@ -8268,12 +8261,12 @@ nsMargin nsLayoutUtils::ScrollbarAreaToExcludeFromCompositionBoundsFor(
   if (!isRootContentDocRootScrollFrame) {
     return nsMargin();
   }
-  if (presContext->UseOverlayScrollbars()) {
-    return nsMargin();
-  }
   ScrollContainerFrame* scrollContainerFrame =
       aScrollFrame->GetScrollTargetFrame();
   if (!scrollContainerFrame) {
+    return nsMargin();
+  }
+  if (scrollContainerFrame->UseOverlayScrollbars()) {
     return nsMargin();
   }
   return scrollContainerFrame->GetActualScrollbarSizes(
@@ -9479,11 +9472,12 @@ nsRect nsLayoutUtils::ComputeSVGReferenceRect(
       // XXX Bug 1299876
       // The size of stroke-box is not correct if this graphic element has
       // specific stroke-linejoin or stroke-linecap.
-      const uint32_t flags = SVGUtils::eBBoxIncludeFillGeometry |
-                             SVGUtils::eBBoxIncludeStroke |
-                             (bool(aMayHaveCyclicDependency)
-                                  ? SVGUtils::eAvoidCycleIfNonScalingStroke
-                                  : 0);
+      SVGBBoxFlags flags = {SVGBBoxFlag::IncludeFillGeometry,
+                            SVGBBoxFlag::IncludeStroke};
+      if (bool(aMayHaveCyclicDependency)) {
+        flags += SVGBBoxFlag::AvoidCycleIfNonScalingStroke;
+      }
+
       gfxRect bbox = SVGUtils::GetBBox(aFrame, flags);
       r = nsLayoutUtils::RoundGfxRectToAppRect(bbox, AppUnitsPerCSSPixel());
       break;
@@ -9500,7 +9494,7 @@ nsRect nsLayoutUtils::ComputeSVGReferenceRect(
     }
     case StyleGeometryBox::FillBox: {
       gfxRect bbox =
-          SVGUtils::GetBBox(aFrame, SVGUtils::eBBoxIncludeFillGeometry);
+          SVGUtils::GetBBox(aFrame, SVGBBoxFlag::IncludeFillGeometry);
       r = nsLayoutUtils::RoundGfxRectToAppRect(bbox, AppUnitsPerCSSPixel());
       break;
     }
@@ -9800,8 +9794,7 @@ bool nsLayoutUtils::ShouldHandleMetaViewport(const Document* aDocument) {
   return StaticPrefs::dom_meta_viewport_enabled() || (bc && bc->InRDMPane());
 }
 
-/* static */
-ComputedStyle* nsLayoutUtils::StyleForScrollbar(
+static nsIContent* GetOriginatingElementForScrollbarPart(
     const nsIFrame* aScrollbarPart) {
   // Get the closest content node which is not an anonymous scrollbar
   // part. It should be the originating element of the scrollbar part.
@@ -9819,6 +9812,14 @@ ComputedStyle* nsLayoutUtils::StyleForScrollbar(
     content = content->GetParent();
   }
   MOZ_ASSERT(content, "Native anonymous element with no originating node?");
+  return content;
+}
+
+/* static */
+ComputedStyle* nsLayoutUtils::StyleForScrollbar(
+    const nsIFrame* aScrollbarPart) {
+  nsIContent* content = GetOriginatingElementForScrollbarPart(aScrollbarPart);
+
   // Use the style from the primary frame of the content.
   // Note: it is important to use the primary frame rather than an
   // ancestor frame of the scrollbar part for the correct handling of
@@ -9842,6 +9843,40 @@ ComputedStyle* nsLayoutUtils::StyleForScrollbar(
   // Dropping the strong reference is fine because the style should be
   // held strongly by the element.
   return style.get();
+}
+
+/* static */
+bool nsLayoutUtils::UseOverlayScrollbars(const nsIFrame* aScrollbarPart) {
+  nsIContent* content = GetOriginatingElementForScrollbarPart(aScrollbarPart);
+  if (nsIFrame* primaryFrame = content->GetPrimaryFrame()) {
+    ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(primaryFrame);
+    if (!scrollContainerFrame) {
+      scrollContainerFrame =
+          primaryFrame->PresShell()->GetRootScrollContainerFrame();
+    }
+    if (scrollContainerFrame) {
+      return scrollContainerFrame->UseOverlayScrollbars();
+    }
+  }
+  return aScrollbarPart->PresContext()->UseOverlayScrollbars();
+}
+
+/* static */
+StyleScrollbarWidth nsLayoutUtils::ScrollbarWidthFor(
+    const nsIFrame* aScrollbarPart) {
+  const auto* style = StyleForScrollbar(aScrollbarPart);
+  nsIContent* content = GetOriginatingElementForScrollbarPart(aScrollbarPart);
+  if (nsIFrame* primaryFrame = content->GetPrimaryFrame()) {
+    ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(primaryFrame);
+    if (!scrollContainerFrame) {
+      scrollContainerFrame =
+          primaryFrame->PresShell()->GetRootScrollContainerFrame();
+    }
+    if (scrollContainerFrame) {
+      return scrollContainerFrame->ScrollbarWidth(style);
+    }
+  }
+  return style->StyleUIReset()->ComputedScrollbarWidth();
 }
 
 enum class FramePosition : uint8_t {

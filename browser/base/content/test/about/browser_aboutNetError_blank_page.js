@@ -71,7 +71,26 @@ async function test_blankPage(
         const card = netErrorCard.wrappedJSObject;
         await card.getUpdateComplete();
 
-        titleEl = card.netErrorTitleText;
+        titleEl = card.errorTitle;
+
+        const introEl = card.shadowRoot.getElementById("error-intro");
+        is(
+          introEl?.getAttribute("data-l10n-id"),
+          "fp-neterror-http-error-intro",
+          "Intro element has correct l10n id"
+        );
+        const introArgs = JSON.parse(introEl?.getAttribute("data-l10n-args"));
+        ok(introArgs?.hostname, "Intro has hostname arg");
+        is(
+          introArgs?.responsestatus,
+          expectedStatus,
+          "Intro has correct responsestatus"
+        );
+        is(
+          introArgs?.responsestatustext,
+          expectedText,
+          "Intro has correct responsestatustext"
+        );
       } else {
         titleEl = doc.querySelector(".title-text");
 

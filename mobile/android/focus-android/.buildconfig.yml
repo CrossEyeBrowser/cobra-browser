@@ -51,7 +51,9 @@ projects:
     - components:service-digitalassetlinks
     - components:service-glean
     - components:service-location
+    - components:service-merino-manifest
     - components:service-nimbus
+    - components:support-android-test
     - components:support-appservices
     - components:support-base
     - components:support-images

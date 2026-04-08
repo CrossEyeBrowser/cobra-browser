@@ -1,13 +1,9 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef ds_BitArray_h
 #define ds_BitArray_h
-
-#include "mozilla/MathAlgorithms.h"
 
 #include <limits.h>
 #include <string.h>
@@ -15,23 +11,6 @@
 #include "jstypes.h"
 
 namespace js {
-
-namespace detail {
-
-template <typename WordT>
-inline uint_fast8_t CountTrailingZeroes(WordT word);
-
-template <>
-inline uint_fast8_t CountTrailingZeroes(uint32_t word) {
-  return mozilla::CountTrailingZeroes32(word);
-}
-
-template <>
-inline uint_fast8_t CountTrailingZeroes(uint64_t word) {
-  return mozilla::CountTrailingZeroes64(word);
-}
-
-}  // namespace detail
 
 template <size_t nbits>
 class BitArray {

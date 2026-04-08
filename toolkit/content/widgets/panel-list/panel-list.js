@@ -59,7 +59,7 @@
 
     initializePopover() {
       if (this.supportsPopover() && !this.hasAttribute("popover")) {
-        this.setAttribute("popover", "manual");
+        this.setAttribute("popover", "auto");
       }
     }
 
@@ -114,6 +114,13 @@
           triggeringEvent.inputSource == MouseEvent.MOZ_SOURCE_UNKNOWN ||
           triggeringEvent.code == "ArrowRight" ||
           triggeringEvent.code == "ArrowLeft");
+
+      if (this.supportsPopover()) {
+        const autohideDisabled = this.hasServices()
+          ? Services.prefs.getBoolPref("ui.popup.disable_autohide", false)
+          : false;
+        this.setAttribute("popover", autohideDisabled ? "manual" : "auto");
+      }
 
       // Bug 2010864 - We need to set `open` to true before calling this.onShow()
       // when the panel-list supports popover, otherwise the panel
@@ -206,6 +213,8 @@
       );
     }
 
+    // FIXME: Bug 2022047 - Using anchor positioning would significantly
+    // reduce the complexity of this function.
     async setAlign() {
       const hostElement = this.parentElement || this.getRootNode().host;
 
@@ -236,6 +245,7 @@
       } = await new Promise(resolve => {
         this.style.left = 0;
         this.style.top = 0;
+        this.style.minWidth = "";
 
         requestAnimationFrame(() =>
           setTimeout(() => {
@@ -280,43 +290,60 @@
         // Calculate the left/right alignment.
         let align;
         let leftOffset;
+        let effectivePanelWidth = this.hasAttribute("min-width-from-anchor")
+          ? Math.max(panelWidth, anchorWidth)
+          : panelWidth;
         let leftAlignX = anchorLeft;
-        let rightAlignX = anchorLeft + anchorWidth - panelWidth;
+        let rightAlignX = anchorLeft + anchorWidth - effectivePanelWidth;
 
         if (this.isDocumentRTL()) {
-          // Prefer aligning on the right.
-          align = rightAlignX < 0 ? "left" : "right";
+          // Prefer aligning on the right. Fall back to left if the right-aligned
+          // panel would overflow the left viewport edge (rightAlignX < 0), or if
+          // the anchor's right edge exceeds the viewport width (which would place
+          // the right-aligned panel off-screen on the right).
+          align =
+            rightAlignX < 0 || anchorLeft + anchorWidth > clientWidth
+              ? "left"
+              : "right";
         } else {
           // Prefer aligning on the left.
-          align = leftAlignX + panelWidth > clientWidth ? "right" : "left";
+          align =
+            leftAlignX + effectivePanelWidth > clientWidth ? "right" : "left";
         }
-        leftOffset = align === "left" ? leftAlignX : rightAlignX;
+        const alignX = align === "left" ? leftAlignX : rightAlignX;
+        leftOffset = Math.max(
+          0,
+          Math.min(alignX, clientWidth - effectivePanelWidth)
+        );
 
         let bottomSpaceY = winHeight - anchorBottom;
 
         let valign;
         let topOffset;
         const VIEWPORT_PANEL_MIN_MARGIN = 10; // 10px ensures that the panel is not flush with the viewport.
+        const roundedAnchorBottom = Math.round(anchorBottom);
+        const roundedBottomSpaceY = Math.round(bottomSpaceY);
+        const roundedAnchorTop = Math.round(anchorTop);
+        const roundedPanelHeight = Math.round(panelHeight);
 
         // Only want to valign top when there's more space between the bottom of the anchor element and the top of the viewport.
         // If there's more space between the bottom of the anchor element and the bottom of the viewport, we valign bottom.
         if (
-          anchorBottom > bottomSpaceY &&
-          anchorBottom + panelHeight + VIEWPORT_PANEL_MIN_MARGIN > winHeight
+          roundedAnchorBottom > roundedBottomSpaceY &&
+          roundedAnchorBottom + roundedPanelHeight + VIEWPORT_PANEL_MIN_MARGIN >
+            winHeight
         ) {
           // Never want to have a negative value for topOffset, so ensure it's at least 10px.
           topOffset = Math.max(
-            anchorTop - panelHeight,
+            roundedAnchorTop - roundedPanelHeight,
             VIEWPORT_PANEL_MIN_MARGIN
           );
           // Provide a max-height for larger elements which will provide scrolling as needed.
-          this.style.maxHeight = `${anchorTop + VIEWPORT_PANEL_MIN_MARGIN}px`;
+          this.style.maxHeight = `${roundedAnchorTop + VIEWPORT_PANEL_MIN_MARGIN}px`;
           valign = "top";
         } else {
-          topOffset = anchorBottom;
-          this.style.maxHeight = `${
-            bottomSpaceY - VIEWPORT_PANEL_MIN_MARGIN
-          }px`;
+          topOffset = roundedAnchorBottom;
+          this.style.maxHeight = `${roundedBottomSpaceY - VIEWPORT_PANEL_MIN_MARGIN}px`;
           valign = "bottom";
         }
 
@@ -331,18 +358,18 @@
           !this.offsetParent;
         if (offsetParentIsBody) {
           // viewport-based
-          this.style.left = `${leftOffset + winScrollX}px`;
-          this.style.top = `${topOffset + winScrollY}px`;
+          this.style.left = `${Math.round(leftOffset + winScrollX)}px`;
+          this.style.top = `${Math.round(topOffset + winScrollY)}px`;
         } else {
           // container-relative
           const offsetParentRect = this.offsetParent.getBoundingClientRect();
-          this.style.left = `${leftOffset - offsetParentRect.left}px`;
-          this.style.top = `${topOffset - offsetParentRect.top}px`;
+          this.style.left = `${Math.round(leftOffset - offsetParentRect.left)}px`;
+          this.style.top = `${Math.round(topOffset - offsetParentRect.top)}px`;
         }
       }
 
       this.style.minWidth = this.hasAttribute("min-width-from-anchor")
-        ? `${anchorWidth}px`
+        ? `${Math.round(anchorWidth)}px`
         : "";
 
       this.removeAttribute("showing");
@@ -363,11 +390,11 @@
       document.addEventListener("mousedown", this);
       // Hide if focus changes and the panel isn't in focus.
       document.addEventListener("focusin", this);
-      // Reset or focus tracking, we treat the first focusin differently.
+      // Reset for focus tracking, we treat the first focusin differently.
       this.focusHasChanged = false;
-      // Hide on resize, scroll or losing window focus.
-      window.addEventListener("resize", this);
+      // Hide on resize, scroll or losing window focus
       window.addEventListener("scroll", this, { capture: true });
+      window.addEventListener("resize", this);
       window.addEventListener("blur", this);
       if (this.parentIsXULPanel()) {
         this.parentElement.addEventListener("popuphidden", this);
@@ -400,15 +427,11 @@
         : e.target.closest && e.target.closest("panel-list") == this;
 
       switch (e.type) {
-        case "scroll":
         case "resize":
-          // Popover panels live in the top layer and remain visible during scroll,
-          // so we don't close them. Note: This means the panel may become visually
-          // disconnected from its anchor after scrolling.
-          if (inPanelList || this.supportsPopover()) {
-            break;
+        case "scroll":
+          if (!inPanelList) {
+            this.hide();
           }
-          this.hide();
           break;
         case "blur":
         case "popuphidden":
@@ -598,7 +621,6 @@
 
     async onShow() {
       this.sendEvent("showing");
-      this.addHideListeners();
 
       if (this.lastAnchorNode?.hasSubmenu) {
         await this.setSubmenuAlign();
@@ -619,6 +641,11 @@
           console.error("Failed to show popover:", ex);
         }
       }
+
+      // Register hide listeners after the popover is shown, so that a second
+      // panel-list opening doesn't have conflicting document-level event
+      // handlers with a first panel-list that hasn't been auto-dismissed yet.
+      this.addHideListeners();
 
       // Always reset this regardless of how the panel list is opened
       // so the first child will be focusable.

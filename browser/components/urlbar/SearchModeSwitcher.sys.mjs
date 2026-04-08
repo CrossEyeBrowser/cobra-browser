@@ -2,9 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+/**
+ * @import { SearchEngine } from "moz-src:///toolkit/components/search/SearchEngine.sys.mjs"
+ */
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
   OpenSearchManager:
     "moz-src:///browser/components/search/OpenSearchManager.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
@@ -103,7 +107,7 @@ export class SearchModeSwitcher {
     event.stopPropagation();
 
     this.#input.window.openPreferences("paneSearch");
-    this.#popup.hidePopup();
+    this.closePanel();
 
     if (this.#input.sapName == "urlbar") {
       Glean.urlbarUnifiedsearchbutton.picked.settings.add(1);
@@ -134,11 +138,11 @@ export class SearchModeSwitcher {
     if (this.#isEnabled()) {
       this.updateSearchIcon();
 
-      if (
-        this.#input.searchMode?.engineName == "Perplexity" &&
-        !lazy.UrlbarPrefs.get("perplexity.hasBeenInSearchMode")
-      ) {
-        lazy.UrlbarPrefs.set("perplexity.hasBeenInSearchMode", true);
+      let engine = lazy.UrlbarSearchUtils.getEngineByName(
+        this.#input.searchMode?.engineName
+      );
+      if (engine && engine.isConfigEngine && !engine.hasBeenUsed) {
+        engine.markAsUsed();
       }
     }
   }
@@ -408,28 +412,14 @@ export class SearchModeSwitcher {
     }
 
     let browser = this.#input.window.gBrowser;
-    let separator = this.#popup.querySelector(
+    let installedEngineSeparator = this.#popup.querySelector(
+      ".searchmode-switcher-popup-installed-engine-separator"
+    );
+    let footerSeparator = this.#popup.querySelector(
       ".searchmode-switcher-popup-footer-separator"
     );
 
-    let openSearchEngines = lazy.OpenSearchManager.getEngines(
-      browser.selectedBrowser
-    );
-    openSearchEngines = openSearchEngines.slice(
-      0,
-      SearchModeSwitcher.MAX_OPENSEARCH_ENGINES
-    );
-
-    for (let engine of openSearchEngines) {
-      let menuitem = this.#createButton(engine.title, engine.icon);
-      menuitem.classList.add("searchmode-switcher-addEngine");
-      menuitem.addEventListener("command", e => {
-        this.#installOpenSearchEngine(e, engine);
-      });
-      this.#popup.insertBefore(menuitem, separator);
-    }
-
-    // Add engines installed.
+    // Add installed engines.
     let engines = [];
     try {
       engines = await lazy.SearchService.getVisibleEngines();
@@ -445,6 +435,8 @@ export class SearchModeSwitcher {
       let menuitem = this.#createButton(engine.name, icon);
       menuitem.classList.add("searchmode-switcher-installed");
       menuitem.setAttribute("label", engine.name);
+      menuitem.setAttribute("tooltiptext", engine.name);
+      menuitem.setAttribute("closemenu", "none");
 
       if (engine.isNew() && engine.isAppProvided) {
         menuitem.setAttribute("badge", await lazy.searchModeNewBadge);
@@ -453,16 +445,61 @@ export class SearchModeSwitcher {
 
       menuitem.addEventListener(
         "command",
-        /** @param {KeyboardEvent} e */ e => {
-          this.search({ engine, openEngineHomePage: e.shiftKey });
+        /** @param {XULCommandEvent} e */ e => {
+          this.search({
+            engine,
+            whereToOpenSerp: this.#whereToOpenSerp(e),
+          });
         }
       );
-      this.#popup.insertBefore(menuitem, separator);
+
+      installedEngineSeparator.before(menuitem);
     }
 
-    await this.#buildLocalSearchModeList(separator);
+    await this.#buildLocalSearchModeList(footerSeparator);
+
+    // Add engines that can be installed.
+    let openSearchEngines = lazy.OpenSearchManager.getEngines(
+      browser.selectedBrowser
+    );
+    openSearchEngines = openSearchEngines.slice(
+      0,
+      SearchModeSwitcher.MAX_OPENSEARCH_ENGINES
+    );
+
+    for (let engine of openSearchEngines) {
+      let menuitem = this.#createButton(engine.title, engine.icon);
+      menuitem.classList.add("searchmode-switcher-addEngine");
+      this.#input.document.l10n.setAttributes(
+        menuitem,
+        "search-one-offs-add-engine",
+        {
+          engineName: engine.title,
+        }
+      );
+      menuitem.addEventListener("command", e => {
+        this.#installOpenSearchEngine(e, engine);
+      });
+      footerSeparator.after(menuitem);
+    }
 
     this.#popup.dispatchEvent(new Event("rebuild"));
+  }
+
+  /**
+   * @param {MouseEvent|KeyboardEvent|XULCommandEvent} event
+   * @returns {string|null} Returns where the engine result page should be
+   * opened, or null if it should not be opened.
+   */
+  #whereToOpenSerp(event) {
+    let where = lazy.BrowserUtils.whereToOpenLink(event, false, true);
+    if (where.startsWith("tab")) {
+      return where;
+    }
+    if (event.shiftKey) {
+      return "current";
+    }
+    return null;
   }
 
   /**
@@ -501,11 +538,24 @@ export class SearchModeSwitcher {
         }
       );
 
-      this.#popup.insertBefore(menuitem, separator);
+      separator.before(menuitem);
     }
   }
 
-  search({ engine = null, restrict = null, openEngineHomePage = false } = {}) {
+  /**
+   *
+   * @param {object} [opts]
+   * @param {SearchEngine} [opts.engine]
+   * @param {?string} [opts.restrict]
+   * @param {?string} [opts.whereToOpenSerp]
+   *   If this is null, start a query in the urlbar.
+   *   Otherwise, open the SERP in that place.
+   */
+  search({ engine = null, restrict = null, whereToOpenSerp = null } = {}) {
+    if (!whereToOpenSerp || whereToOpenSerp == "current") {
+      this.closePanel();
+    }
+
     let search = "";
     /** @type {Parameters<UrlbarInput["search"]>[1]} */
     let opts = null;
@@ -520,15 +570,14 @@ export class SearchModeSwitcher {
       opts = { searchModeEntry: "searchbutton" };
     }
 
-    if (openEngineHomePage) {
+    if (whereToOpenSerp) {
       this.#input.openEngineHomePage(search, {
         searchEngine: opts.searchEngine,
+        where: whereToOpenSerp,
       });
     } else {
       this.#input.search(search, opts);
     }
-
-    this.#popup.hidePopup();
 
     if (engine) {
       if (this.#input.sapName == "urlbar") {
@@ -543,7 +592,7 @@ export class SearchModeSwitcher {
       }
     } else {
       console.warn(
-        `Unexpected search: ${JSON.stringify({ engine, restrict, openEngineHomePage })}`
+        `Unexpected search: ${JSON.stringify({ engine, restrict, whereToOpenSerp })}`
       );
     }
   }
@@ -585,7 +634,7 @@ export class SearchModeSwitcher {
   }
 
   #createButton(label, icon) {
-    let menuitem = this.#input.window.document.createXULElement("menuitem");
+    let menuitem = this.#input.document.createXULElement("menuitem");
     menuitem.setAttribute("label", label);
     menuitem.setAttribute("class", "menuitem-iconic");
     menuitem.setAttribute("image", icon ?? DEFAULT_ENGINE_ICON);
@@ -602,7 +651,7 @@ export class SearchModeSwitcher {
       );
       this.search({
         engine: eng,
-        openEngineHomePage: e.shiftKey,
+        whereToOpenSerp: this.#whereToOpenSerp(e),
       });
     };
     Services.obs.addObserver(observer, topic);

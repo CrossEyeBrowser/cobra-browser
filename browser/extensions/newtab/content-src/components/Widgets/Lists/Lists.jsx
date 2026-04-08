@@ -19,20 +19,23 @@ const TASK_TYPE = {
 };
 
 const USER_ACTION_TYPES = {
+  CHANGE_SIZE: "change_size",
   LIST_COPY: "list_copy",
   LIST_CREATE: "list_create",
-  LIST_EDIT: "list_edit",
   LIST_DELETE: "list_delete",
-  TASK_CREATE: "task_create",
-  TASK_EDIT: "task_edit",
-  TASK_DELETE: "task_delete",
+  LIST_EDIT: "list_edit",
   TASK_COMPLETE: "task_complete",
+  TASK_CREATE: "task_create",
+  TASK_DELETE: "task_delete",
+  TASK_EDIT: "task_edit",
 };
 
 const PREF_WIDGETS_LISTS_MAX_LISTS = "widgets.lists.maxLists";
 const PREF_WIDGETS_LISTS_MAX_LISTITEMS = "widgets.lists.maxListItems";
 const PREF_WIDGETS_LISTS_BADGE_ENABLED = "widgets.lists.badge.enabled";
 const PREF_WIDGETS_LISTS_BADGE_LABEL = "widgets.lists.badge.label";
+const PREF_NOVA_ENABLED = "nova.enabled";
+const PREF_LISTS_SIZE = "widgets.lists.size";
 
 // eslint-disable-next-line max-statements
 function Lists({
@@ -48,9 +51,18 @@ function Lists({
   const [pendingNewList, setPendingNewList] = useState(null);
   const selectedList = useMemo(() => lists[selected], [lists, selected]);
 
-  // Bug 2012829 - Calculate widget size dynamically based on isMaximized prop.
-  // Future sizes: mini, medium, large.
-  const widgetSize = isMaximized ? "medium" : "small";
+  // @nova-cleanup(remove-pref): Remove novaEnabled and this check; always use prefs[PREF_LISTS_SIZE] directly and always apply col-4 class after Nova ships
+  const novaEnabled = prefs[PREF_NOVA_ENABLED];
+  // Nova path: only "medium" or "large" are selectable; "small" is disabled in the submenu
+  const isSmallSize = novaEnabled
+    ? false
+    : !isMaximized && widgetsMayBeMaximized;
+  let widgetSize;
+  if (novaEnabled) {
+    widgetSize = prefs[PREF_LISTS_SIZE] || "large";
+  } else {
+    widgetSize = isSmallSize ? "small" : "medium";
+  }
 
   const prevCompletedCount = useRef(selectedList?.completed?.length || 0);
   const inputRef = useRef(null);
@@ -81,7 +93,7 @@ function Lists({
       );
       const telemetryData = {
         widget_name: "lists",
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+        widget_size: widgetSize,
       };
       dispatch(
         ac.AlsoToMain({
@@ -90,7 +102,7 @@ function Lists({
         })
       );
     });
-  }, [dispatch, widgetsMayBeMaximized, widgetSize]);
+  }, [dispatch, widgetSize]);
 
   const listsRef = useIntersectionObserver(handleIntersection);
 
@@ -236,7 +248,7 @@ function Lists({
           widget_name: "lists",
           widget_source: "widget",
           user_action: USER_ACTION_TYPES.TASK_CREATE,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+          widget_size: widgetSize,
         };
         dispatch(
           ac.OnlyToMain({
@@ -317,7 +329,7 @@ function Lists({
           widget_name: "lists",
           widget_source: "widget",
           user_action: userAction,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+          widget_size: widgetSize,
         };
         dispatch(
           ac.AlsoToMain({
@@ -358,7 +370,7 @@ function Lists({
         widget_name: "lists",
         widget_source: "widget",
         user_action: USER_ACTION_TYPES.TASK_DELETE,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+        widget_size: widgetSize,
       };
       dispatch(
         ac.OnlyToMain({
@@ -409,7 +421,7 @@ function Lists({
           widget_name: "lists",
           widget_source: "widget",
           user_action: USER_ACTION_TYPES.LIST_EDIT,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+          widget_size: widgetSize,
         };
         dispatch(
           ac.OnlyToMain({
@@ -457,7 +469,7 @@ function Lists({
         widget_name: "lists",
         widget_source: "widget",
         user_action: USER_ACTION_TYPES.LIST_CREATE,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+        widget_size: widgetSize,
       };
       dispatch(
         ac.OnlyToMain({
@@ -501,7 +513,7 @@ function Lists({
           widget_name: "lists",
           widget_source: "widget",
           user_action: USER_ACTION_TYPES.LIST_DELETE,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+          widget_size: widgetSize,
         };
         dispatch(
           ac.OnlyToMain({
@@ -555,7 +567,7 @@ function Lists({
           widget_name: "lists",
           widget_source: "widget",
           user_action: USER_ACTION_TYPES.LIST_DELETE,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+          widget_size: widgetSize,
         };
         dispatch(
           ac.OnlyToMain({
@@ -583,7 +595,7 @@ function Lists({
         widget_name: "lists",
         widget_source: "context_menu",
         enabled: false,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+        widget_size: widgetSize,
       };
       dispatch(
         ac.OnlyToMain({
@@ -633,7 +645,7 @@ function Lists({
         widget_name: "lists",
         widget_source: "widget",
         user_action: USER_ACTION_TYPES.LIST_COPY,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
+        widget_size: widgetSize,
       };
       dispatch(
         ac.OnlyToMain({
@@ -676,6 +688,52 @@ function Lists({
       prevCompletedCount.current = doneCount;
     }
   }, [selectedList, fireConfetti, selected]);
+
+  const handleChangeSize = useCallback(
+    size => {
+      batch(() => {
+        dispatch(
+          ac.OnlyToMain({
+            type: at.SET_PREF,
+            data: { name: PREF_LISTS_SIZE, value: size },
+          })
+        );
+        dispatch(
+          ac.OnlyToMain({
+            type: at.WIDGETS_USER_EVENT,
+            data: {
+              widget_name: "lists",
+              widget_source: "context_menu",
+              user_action: USER_ACTION_TYPES.CHANGE_SIZE,
+              action_value: size,
+              widget_size: size,
+            },
+          })
+        );
+      });
+    },
+    [dispatch]
+  );
+
+  const sizeSubmenuRef = useRef(null);
+  useEffect(() => {
+    const el = sizeSubmenuRef.current;
+    if (!el) {
+      return undefined;
+    }
+    // The size submenu panel-list is moved into the panel-item's shadow DOM by
+    // the panel-list custom element, so React's synthetic onClick doesn't reach
+    // inner items. We use composedPath() to find the clicked item across the
+    // shadow boundary via its data-size attribute.
+    const listener = e => {
+      const item = e.composedPath().find(node => node.dataset?.size);
+      if (item) {
+        handleChangeSize(item.dataset.size);
+      }
+    };
+    el.addEventListener("click", listener);
+    return () => el.removeEventListener("click", listener);
+  }, [handleChangeSize]);
 
   if (!lists) {
     return null;
@@ -731,7 +789,7 @@ function Lists({
 
   return (
     <article
-      className={`lists ${isMaximized ? "is-maximized" : ""}`}
+      className={`lists widget ${novaEnabled ? "col-4" : ""} ${isMaximized ? "is-maximized" : ""}`}
       ref={el => {
         listsRef.current = [el];
       }}
@@ -802,6 +860,33 @@ function Lists({
             data-l10n-id="newtab-widget-lists-menu-copy"
             onClick={() => handleCopyListToClipboard()}
           ></panel-item>
+          {
+            // @nova-cleanup(remove-conditional): Remove the novaEnabled check; always
+            // render the size submenu after Nova ships
+            novaEnabled && (
+              <panel-item
+                submenu="lists-size-submenu"
+                data-l10n-id="newtab-widget-menu-change-size"
+              >
+                <panel-list
+                  ref={sizeSubmenuRef}
+                  slot="submenu"
+                  id="lists-size-submenu"
+                >
+                  {["small", "medium", "large"].map(size => (
+                    <panel-item
+                      key={size}
+                      type="checkbox"
+                      checked={widgetSize === size || undefined}
+                      data-size={size}
+                      data-l10n-id={`newtab-widget-size-${size}`}
+                      {...(size === "small" ? { disabled: true } : {})}
+                    />
+                  ))}
+                </panel-list>
+              </panel-item>
+            )
+          }
           <panel-item
             data-l10n-id="newtab-widget-menu-hide"
             onClick={() => handleHideLists()}

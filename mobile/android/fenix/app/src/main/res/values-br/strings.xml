@@ -775,11 +775,7 @@
   <string name="customize_addon_collection_user_hint">Perc’henn an dastumad (Naoudi an arveriad)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">Kemmet eo bet an dastumad askouezhioù. Emañ an arload o serriñ evit arloañ ar c’hemmoù…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Distreiñ</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Sinedoù</string>
@@ -1448,7 +1444,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Embann</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Eilañ</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Eilañ</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Rannañ</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -1496,12 +1492,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">Dilamet %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">DIZOBER</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">DIZOBER</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">%s dilamet</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">%s dilamet</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Elfennoù dilamet: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Elfennoù dilamet: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Kent</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Ouzhpennañ un teuliad</string>
@@ -1740,23 +1740,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Lakaat Firefox da vezañ ho merdeer dre ziouer</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Klask ar merdeiñ prevez</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Klask ar merdeiñ prevez</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Merdeiñ hep toupin enrollet pe roll istor e %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Merdeiñ hep toupin enrollet pe roll istor e %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Merdeiñ hep roud ebet</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Merdeiñ hep roud ebet</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">Ar merdeiñ prevez e %1$s ne enroll ket ho titouroù.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">Ar merdeiñ prevez e %1$s ne enroll ket ho titouroù.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Kregiñ gant ho klask kentañ</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Kregiñ gant ho klask kentañ</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Klask un dra nes. Pe dizoloit un dra bennak plijus.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Klask un dra nes. Pe dizoloit un dra bennak plijus.</string>
   <!--
     Survey
 
@@ -1807,8 +1807,6 @@
   <string name="preference_accessibility_text_size_summary">Kreskiñ pe zigreskiñ an destenn war al lecʼhiennoù</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Ment an nodrezh</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Ment emgefreek an nodrezh</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2628,7 +2626,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">N’haller ket kargañ ar yezhoù. Gwiriit ma’z oc’h kennasket ouzh ar genrouedad.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">Hon digarezit, n’eo ket skoret ar yezh \"%1$s\" c’hoazh.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">Hon digarezit, n’eo ket skoret ar yezh \"%1$s\" c’hoazh.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">O treiñ…</string>
   <!--
@@ -2909,6 +2907,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Ouzhpennañ d’an ivinelloù prevez</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 

@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -4050,10 +4048,8 @@ bool nsDisplayBackgroundColor::CreateWebRenderCommands(
     aBuilder.PushRectWithAnimation(r, r, !BackfaceIsHidden(),
                                    wr::ToColorF(ToDeviceColor(color)), &prop);
   } else {
-    aBuilder.StartGroup(this);
     aBuilder.PushRect(r, r, !BackfaceIsHidden(), false, false,
                       wr::ToColorF(ToDeviceColor(color)));
-    aBuilder.FinishGroup();
   }
 
   return true;
@@ -7845,17 +7841,9 @@ bool nsDisplayText::CreateWebRenderCommands(
 
   LCPTextFrameHelper::MaybeUnionTextFrame(f, bounds - ToReferenceFrame());
 
-  aBuilder.StartGroup(this);
-
   RenderToContext(textDrawer, aDisplayListBuilder, mVisibleRect,
                   aBuilder.GetInheritedOpacity(), true);
   const bool result = textDrawer->GetTextDrawer()->Finish();
-
-  if (result) {
-    aBuilder.FinishGroup();
-  } else {
-    aBuilder.CancelGroup(true);
-  }
 
   return result;
 }
@@ -8836,6 +8824,11 @@ void nsDisplayDestination::Paint(nsDisplayListBuilder* aBuilder,
   aCtx->GetDrawTarget()->Destination(
       mDestinationName.get(),
       NSPointToPoint(GetPaintRect(aBuilder, aCtx).TopLeft(), appPerDev));
+}
+
+void nsDisplayAccessibleId::Paint(nsDisplayListBuilder* aBuilder,
+                                  gfxContext* aCtx) {
+  aCtx->GetDrawTarget()->AccessibleId(mBrowsingContextId, mAccId);
 }
 
 void nsDisplayListCollection::SerializeWithCorrectZOrder(

@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -22,6 +20,9 @@
 #include "nsLayoutUtils.h"
 #include "nsWindow.h"
 #include "wayland-proxy.h"
+#include "ScreenHelperGTK.h"
+
+#include <dlfcn.h>
 
 #undef LOG
 #undef LOG_VERBOSE
@@ -76,6 +77,7 @@ nsWaylandDisplay* WaylandDisplayGet() {
     // value.
     wl_display_set_max_buffer_size(waylandDisplay, 1024 * 1024);
     gWaylandDisplay = new nsWaylandDisplay(waylandDisplay);
+    gWaylandDisplay->Init();
   }
   return gWaylandDisplay;
 }
@@ -507,6 +509,8 @@ void nsWaylandDisplay::SetAppMenuManager(
   mAppMenuManager = aAppMenuManager;
 }
 
+void nsWaylandDisplay::SetFixes(wl_fixes* aFixes) { mFixes = aFixes; }
+
 void nsWaylandDisplay::SetCMSupportedFeature(uint32_t aFeature) {
   LOG("nsWaylandDisplay::SetCMSupportedFeature() [%d]", aFeature);
   switch (aFeature) {
@@ -663,24 +667,36 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
       monitor->id, x, y, physical_width, physical_height, subpixel, transform);
   monitor->x = x;
   monitor->y = y;
+  monitor->pendingChanges = true;
 }
-
-static void output_handle_done(void* data, struct wl_output* wl_output) {}
-
-static void output_handle_scale(void* data, struct wl_output* wl_output,
-                                int32_t scale) {}
 
 static void output_handle_mode(void* data, struct wl_output* wl_output,
                                uint32_t flags, int width, int height,
                                int refresh) {
   auto* monitor = static_cast<nsWaylandDisplay::MonitorConfig*>(data);
-  LOG("nsWaylandDisplay ID %d mode output size %d x %d", monitor->id, width,
-      height);
   if ((flags & WL_OUTPUT_MODE_CURRENT) == 0) {
     return;
   }
+  LOG("nsWaylandDisplay ID %d mode output size %d x %d", monitor->id, width,
+      height);
   monitor->pixelWidth = width;
   monitor->pixelHeight = height;
+  monitor->pendingChanges = true;
+}
+
+static void output_handle_scale(void* data, struct wl_output* wl_output,
+                                int32_t scale) {
+  auto* monitor = static_cast<nsWaylandDisplay::MonitorConfig*>(data);
+  LOG("nsWaylandDisplay ID %d Scale change [%d]", monitor->id, scale);
+  monitor->pendingChanges = true;
+}
+
+static void output_handle_done(void* data, struct wl_output* wl_output) {
+  auto* monitor = static_cast<nsWaylandDisplay::MonitorConfig*>(data);
+  LOG("nsWaylandDisplay ID %d Done", monitor->id);
+  monitor->pendingChanges = false;
+
+  WaylandDisplayGet()->RefreshScreens();
 }
 
 static const struct wl_output_listener output_listener = {
@@ -689,6 +705,17 @@ static const struct wl_output_listener output_listener = {
     output_handle_done,
     output_handle_scale,
 };
+
+void nsWaylandDisplay::RefreshScreens() {
+  LOG("nsWaylandDisplay::RefreshScreens()");
+  for (unsigned int i = 0; i < mMonitors.Length(); i++) {
+    if (mMonitors[i]->pendingChanges) {
+      LOG("  monitor ID %d is not complete", mMonitors[i]->id);
+      return;
+    }
+  }
+  ScreenHelperGTK::RequestRefreshScreens();
+}
 
 void nsWaylandDisplay::AddWlOutput(wl_output* aWlOutput, int aId) {
   wl_output_add_listener(aWlOutput, &output_listener, AddMonitorConfig(aId));
@@ -823,6 +850,16 @@ static void global_registry_handler(void* data, wl_registry* registry,
     auto* output =
         WaylandRegistryBind<wl_output>(registry, id, &wl_output_interface, 2);
     display->AddWlOutput(output, id);
+  } else if (iface.EqualsLiteral("wl_fixes")) {
+    // wl_fixes_interface was introduced in libwayland-client 1.24, but
+    // Ubuntu 22.04 still ships 1.20.
+    static auto* sWlFixesInterface =
+        (wl_interface*)dlsym(RTLD_DEFAULT, "wl_fixes_interface");
+    if (sWlFixesInterface) {
+      auto* fixes = WaylandRegistryBind<wl_fixes>(
+          registry, id, sWlFixesInterface, MIN(version, 2));
+      display->SetFixes(fixes);
+    }
   }
 }
 
@@ -832,10 +869,17 @@ static void global_registry_remover(void* data, wl_registry* registry,
   if (!display) {
     return;
   }
-  if (display->RemoveMonitorConfig(id)) {
-    return;
+
+  if (!display->RemoveMonitorConfig(id)) {
+    display->RemoveSeat(id);
   }
-  display->RemoveSeat(id);
+
+  if (wl_fixes* fixes = display->GetFixes()) {
+    if (wl_fixes_get_version(fixes) >=
+        WL_FIXES_ACK_GLOBAL_REMOVE_SINCE_VERSION) {
+      wl_fixes_ack_global_remove(fixes, registry, id);
+    }
+  }
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -1059,12 +1103,20 @@ void WlCompositorCrashHandler() {
 nsWaylandDisplay::nsWaylandDisplay(wl_display* aDisplay)
     : mThreadId(PR_GetCurrentThread()), mDisplay(aDisplay) {
   MOZ_DIAGNOSTIC_ASSERT(XRE_IsParentProcess());
+  for (auto& e : mSupportedTransfer) {
+    e = -1;
+  };
+  for (auto& e : mSupportedPrimaries) {
+    e = -1;
+  };
+}
 
+void nsWaylandDisplay::Init() {
   // GTK sets the log handler on display creation, thus we overwrite it here
   // in a similar fashion
   wl_log_set_handler_client(WlLogHandler);
 
-  LOG("nsWaylandDisplay::nsWaylandDisplay()");
+  LOG("nsWaylandDisplay::Init()");
 
   mFormats = new DMABufFormats();
   mRegistry = wl_display_get_registry(mDisplay);
@@ -1074,14 +1126,7 @@ nsWaylandDisplay::nsWaylandDisplay(wl_display* aDisplay)
   WaitForAsyncRoundtrips();
   EnsureDMABufFormats();
 
-  LOG("nsWaylandDisplay::nsWaylandDisplay() init finished");
-
-  for (auto& e : mSupportedTransfer) {
-    e = -1;
-  };
-  for (auto& e : mSupportedPrimaries) {
-    e = -1;
-  };
+  LOG("  init finished");
 
   // Check we have critical Wayland interfaces.
   // Missing ones indicates a compositor bug and we can't continue.

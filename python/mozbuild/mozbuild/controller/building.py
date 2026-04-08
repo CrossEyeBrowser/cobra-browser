@@ -14,6 +14,7 @@ import sys
 import time
 from collections import Counter, OrderedDict, namedtuple
 from itertools import dropwhile, islice, takewhile
+from pathlib import Path
 from textwrap import TextWrapper
 
 from mach.logging import BUILD_ERROR, SUPPRESSED_WARNING, THIRD_PARTY_WARNING
@@ -53,7 +54,7 @@ RE_BUILD_OUTPUT = re.compile(
     |(?P<error_summary>^\d+\s+errors?\s+generated\.)
     |(?P<make_error>make(?:\[\d+\])?\s*:\s*\*\*\*)
     |(?P<nsis_warning_block>^\d+\s+warnings?:)
-    |(?P<error_block>^error:(?:\[e\d+\])?:?\s?)
+    |(?P<error_block>^error(?:\[e\d+\])?:\s?)
     |(?P<warning_standalone>^warning:\s+mkdir\s)
     |(?P<warning_num>^warning\s+\d+:)
     |(?P<warning_block>^warning:\s?)
@@ -267,6 +268,20 @@ class BuildMonitor(MozbuildObject):
         self.resources.start()
         self._resources_started = True
 
+        if "MOZ_AUTOMATION" in os.environ and "UPLOAD_PATH" in os.environ:
+            self._build_resources_profile_path = mozpath.join(
+                os.environ["UPLOAD_PATH"], "profile_build_resources.json"
+            )
+        else:
+            self._ensure_build_log_dir_exists()
+            self._build_resources_profile_path = self._get_build_log_filename(
+                construct_log_filename("profile")
+            )
+        self.resources.start_streaming(self._build_resources_profile_path)
+        print(
+            f"Streaming resource usage profile to: {self._build_resources_profile_path}"
+        )
+
     def on_line(self, line):
         """Consume a line of output from the build system.
 
@@ -373,22 +388,9 @@ class BuildMonitor(MozbuildObject):
         self.warnings_database.save_to_file(self._warnings_path)
 
     def record_usage(self):
-        build_resources_profile_path = None
         try:
-            # When running on automation, we store the resource usage data in
-            # the upload path, alongside, for convenience, a copy of the HTML
-            # viewer.
-            if "MOZ_AUTOMATION" in os.environ and "UPLOAD_PATH" in os.environ:
-                build_resources_profile_path = mozpath.join(
-                    os.environ["UPLOAD_PATH"], "profile_build_resources.json"
-                )
-            else:
-                self._ensure_build_log_dir_exists()
-                build_resources_profile_path = self._get_build_log_filename(
-                    construct_log_filename("profile")
-                )
             with open(
-                build_resources_profile_path, "w", encoding="utf-8", newline="\n"
+                self._build_resources_profile_path, "w", encoding="utf-8", newline="\n"
             ) as fh:
                 to_write = json.dumps(
                     self.resources.as_profile(), separators=(",", ":")
@@ -401,14 +403,6 @@ class BuildMonitor(MozbuildObject):
                 {"msg": str(e)},
                 "Exception when writing resource usage file: {msg}",
             )
-            try:
-                if build_resources_profile_path and os.path.exists(
-                    build_resources_profile_path
-                ):
-                    os.remove(build_resources_profile_path)
-            except Exception:
-                # In case there's an exception for some reason, ignore it.
-                pass
 
     def _get_finder_cpu_usage(self):
         """Obtain the CPU usage of the Finder app on OS X.
@@ -896,7 +890,10 @@ class StaticAnalysisFooter(Footer):
         monitor = self.monitor
         total = monitor.num_files
         processed = monitor.num_files_processed
-        percent = "(%.2f%%)" % (processed * 100.0 / total)
+        if total:
+            percent = "(%.2f%%)" % (processed * 100.0 / total)
+        else:
+            percent = "(100%)"
         parts = [
             ("bright_black", "Processing"),
             ("yellow", str(processed)),
@@ -1268,6 +1265,7 @@ class BuildDriver(MozbuildObject):
         keep_going=False,
         mach_context=None,
         append_env=None,
+        allow_subdirectory_build=False,
     ):
         self._ensure_build_log_dir_exists()
         warnings_path = self._get_build_log_filename(construct_log_filename("warnings"))
@@ -1284,6 +1282,7 @@ class BuildDriver(MozbuildObject):
             keep_going,
             mach_context,
             append_env,
+            allow_subdirectory_build,
         )
 
         record_usage = True
@@ -1309,6 +1308,7 @@ class BuildDriver(MozbuildObject):
         keep_going=False,
         mach_context=None,
         append_env=None,
+        allow_subdirectory_build=False,
     ):
         """Invoke the build backend.
 
@@ -1490,6 +1490,19 @@ class BuildDriver(MozbuildObject):
                         make_dir, make_target = resolve_target_to_make(
                             self.topobjdir, path_arg.relpath()
                         )
+                        if (
+                            make_dir is not None
+                            and not allow_subdirectory_build
+                            and (Path(self.topsrcdir) / target).is_dir()
+                        ):
+                            self.log(
+                                logging.WARNING,
+                                "build",
+                                {"target": target},
+                                "Build argument '{target}' is a subdirectory and was ignored. "
+                                "Use --allow-subdirectory-build to override.",
+                            )
+                            continue
 
                     if make_dir is None and make_target is None:
                         return 1

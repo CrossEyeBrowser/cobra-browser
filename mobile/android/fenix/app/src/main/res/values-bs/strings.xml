@@ -919,11 +919,7 @@
   <string name="customize_addon_collection_user_hint">Vlasnik kolekcije (korisnički ID)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">Kolekcija ekstenzija je izmijenjena. Napuštanje aplikacije radi primjene promjena…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Vrati se nazad</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Oznake</string>
@@ -1371,10 +1367,6 @@
   <string name="studies_remove">Ukloni</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Aktivno</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Isprobajte funkcije i ideje prije nego što budu puštene svima.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Instalirajte i pokrenite studije</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
   <string name="studies_learn_more">Saznajte više</string>
   <!--
@@ -1762,7 +1754,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Uredi</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Kopiraj</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Kopiraj</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Podijeli</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -1818,12 +1810,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">Obrisao %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">VRATI</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">VRATI</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">Izbrisano %s</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">Izbrisano %s</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Izbrisane stavke: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Izbrisane stavke: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Idite nazad</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Dodaj novi folder</string>
@@ -2084,23 +2080,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Postavi Firefox kao zadani pretraživač</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Isprobaj privatno pretraživanje</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Isprobaj privatno pretraživanje</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Pretražujte bez sačuvanih kolačića ili historije u %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Pretražujte bez sačuvanih kolačića ili historije u %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Pretražujte bez praćenja</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Pretražujte bez praćenja</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">Privatno pretraživanje u %1$su ne čuva vaše podatke.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">Privatno pretraživanje u %1$su ne čuva vaše podatke.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Započnite svoju prvu pretragu</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Započnite svoju prvu pretragu</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Pronađite nešto u blizini. Ili otkrijte nešto zabavno.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Pronađite nešto u blizini. Ili otkrijte nešto zabavno.</string>
   <!--
     Survey
 
@@ -2153,8 +2149,6 @@
   <string name="preference_accessibility_text_size_summary">Učini tekst na web stranicama većim ili manjim</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Veličina fonta</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Automatsko određivanje veličine fonta</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -3098,7 +3092,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">Učitavanje jezika nije uspjelo. Provjerite internetsku vezu i pokušajte ponovo.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">Žao nam je, još uvijek ne podržavamo %1$s.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">Žao nam je, još uvijek ne podržavamo %1$s.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">Prevođenje…</string>
   <!--
@@ -3415,6 +3409,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Dodaj privatnim tabovima</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 

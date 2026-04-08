@@ -83,18 +83,17 @@ import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Translations
 import org.mozilla.fenix.R
-import org.mozilla.fenix.browser.BrowserAnimator
 import org.mozilla.fenix.browser.BrowserFragmentDirections
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode.Normal
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode.Private
+import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.browser.readermode.ReaderModeController
 import org.mozilla.fenix.browser.store.BrowserScreenAction
 import org.mozilla.fenix.browser.store.BrowserScreenStore
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.NimbusComponents
 import org.mozilla.fenix.components.UseCases
-import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppAction.BookmarkAction
 import org.mozilla.fenix.components.appstate.AppAction.CurrentTabClosed
 import org.mozilla.fenix.components.appstate.AppAction.SearchAction.SearchEnded
@@ -198,8 +197,8 @@ internal sealed class PageEndActionsInteractions(override val source: Source) : 
  * @param publicSuffixList [PublicSuffixList] used to obtain the base domain of the current site.
  * @param settings [Settings] for accessing user preferences.
  * @param navController [NavController] to use for navigating to other in-app destinations.
+ * @param browsingModeManager [BrowsingModeManager] for querying the current browsing mode.
  * @param readerModeController [ReaderModeController] for showing or hiding the reader view UX.
- * @param browserAnimator Helper for animating the browser content when navigating to other screens.
  * @param thumbnailsFeature [BrowserThumbnails] for requesting screenshots of the current tab.
  * @param isWideScreen Callback for checking if the screen is wide.
  * @param isTallScreen Callback for checking if the screen is tall.
@@ -223,8 +222,8 @@ class BrowserToolbarMiddleware(
     private val publicSuffixList: PublicSuffixList,
     private val settings: Settings,
     private val navController: NavController,
+    private val browsingModeManager: BrowsingModeManager,
     private val readerModeController: ReaderModeController,
-    private val browserAnimator: BrowserAnimator,
     private val thumbnailsFeature: () -> BrowserThumbnails?,
     private val isWideScreen: () -> Boolean,
     private val isTallScreen: () -> Boolean,
@@ -291,7 +290,7 @@ class BrowserToolbarMiddleware(
                 navController.nav(
                     R.id.browserFragment,
                     BrowserFragmentDirections.actionGlobalTabManagementFragment(
-                        page = when (appStore.state.mode) {
+                        page = when (browsingModeManager.mode) {
                             Normal -> Page.NormalTabs
                             Private -> Page.PrivateTabs
                         },
@@ -359,7 +358,7 @@ class BrowserToolbarMiddleware(
                         ),
                     )
                 } else {
-                    store.dispatch(SearchQueryUpdated(BrowserToolbarQuery(searchTerms)))
+                    store.dispatch(SearchQueryUpdated(BrowserToolbarQuery(searchTerms), true))
                     appStore.dispatch(SearchStarted(selectedTab.id))
                 }
             }
@@ -379,7 +378,7 @@ class BrowserToolbarMiddleware(
                 }
             }
             is PasteFromClipboardClicked -> {
-                store.dispatch(SearchQueryUpdated(BrowserToolbarQuery(clipboard.text.orEmpty())))
+                store.dispatch(SearchQueryUpdated(BrowserToolbarQuery(clipboard.text.orEmpty()), true))
                 appStore.dispatch(SearchStarted(browserStore.state.selectedTabId))
             }
             is LoadFromClipboardClicked -> {
@@ -414,7 +413,7 @@ class BrowserToolbarMiddleware(
                         searchTermOrURL = it,
                         newTab = false,
                         searchEngine = searchEngine,
-                        private = appStore.state.mode == Private,
+                        private = browsingModeManager.mode == Private,
                     )
                 } ?: run {
                     Logger("BrowserOriginContextMenu").error("Clipboard contains URL but unable to read text")
@@ -572,9 +571,7 @@ class BrowserToolbarMiddleware(
                     useCases.fenixBrowserUseCases.navigateToHomepage()
                 } else {
                     val directions = BrowserFragmentDirections.actionGlobalHome()
-                    browserAnimator.captureEngineViewAndDrawStatically {
-                        navController.navigate(directions)
-                    }
+                    navController.navigate(directions)
                 }
                 next(action)
             }
@@ -739,12 +736,13 @@ class BrowserToolbarMiddleware(
         val isWideWindow = isWideScreen()
         val isTallWindow = isTallScreen()
         val shouldUseExpandedToolbar = settings.shouldUseExpandedToolbar
-        val primarySlotAction = ShortcutType.fromValue(settings.toolbarSimpleShortcut)
-            ?.toToolbarAction() ?: ToolbarAction.NewTab
+        val primarySlotAction = ShortcutType.fromValue(settings.toolbarSimpleShortcut)?.toToolbarAction()
 
-        val configs = listOf(
-            ToolbarActionConfig(primarySlotAction) {
-                !shouldUseExpandedToolbar || !isTallWindow || isWideWindow
+        val configs = listOfNotNull(
+            primarySlotAction?.let {
+                ToolbarActionConfig(it) {
+                    !shouldUseExpandedToolbar || !isTallWindow || isWideWindow
+                }
             },
             ToolbarActionConfig(ToolbarAction.TabCounter) {
                 !shouldUseExpandedToolbar || !isTallWindow || isWideWindow
@@ -809,7 +807,7 @@ class BrowserToolbarMiddleware(
                     onClick = AddNewTab(source),
                 ),
                 BrowserToolbarMenuButton(
-                    icon = DrawableResIcon(iconsR.drawable.mozac_ic_private_mode_24),
+                    icon = DrawableResIcon(iconsR.drawable.mozac_ic_private_mode_fill_24),
                     text = StringResText(tabcounterR.string.mozac_browser_menu_new_private_tab),
                     contentDescription =
                         StringResContentDescription(tabcounterR.string.mozac_browser_menu_new_private_tab),
@@ -845,7 +843,7 @@ class BrowserToolbarMiddleware(
         } else {
             val focusOnAddressBar = !settings.enableHomepageSearchBar
 
-            appStore.dispatch(AppAction.BrowsingModeManagerModeChanged(mode = browsingMode))
+            browsingModeManager.mode = browsingMode
             navController.navigate(
                 BrowserFragmentDirections.actionGlobalHome(focusOnAddressBar = focusOnAddressBar),
             )
@@ -1089,12 +1087,12 @@ class BrowserToolbarMiddleware(
     ): Action = when (toolbarAction) {
         ToolbarAction.NewTab -> ActionButtonRes(
             drawableResId = iconsR.drawable.mozac_ic_plus_24,
-            contentDescription = if (appStore.state.mode == Private) {
+            contentDescription = if (browsingModeManager.mode == Private) {
                 R.string.home_screen_shortcut_open_new_private_tab_2
             } else {
                 R.string.home_screen_shortcut_open_new_tab_2
             },
-            onClick = if (appStore.state.mode == Private) {
+            onClick = if (browsingModeManager.mode == Private) {
                 AddNewPrivateTab(source)
             } else {
                 AddNewTab(source)
@@ -1180,7 +1178,7 @@ class BrowserToolbarMiddleware(
         )
 
         ToolbarAction.TabCounter -> {
-            val isInPrivateMode = appStore.state.mode.isPrivate
+            val isInPrivateMode = browsingModeManager.mode.isPrivate
             val tabsCount = browserStore.state.getNormalOrPrivateTabs(isInPrivateMode).size
 
             val tabCounterDescription = if (isInPrivateMode) {
@@ -1297,5 +1295,6 @@ class BrowserToolbarMiddleware(
         ShortcutType.TRANSLATE -> ToolbarAction.Translate
         ShortcutType.HOMEPAGE -> ToolbarAction.Homepage
         ShortcutType.BACK -> ToolbarAction.Back
+        ShortcutType.NONE -> null
     }
 }

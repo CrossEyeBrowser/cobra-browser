@@ -17,13 +17,14 @@ class HappyEyeballs final {
  public:
   static nsresult Init(HappyEyeballs** aHappyEyeballs,
                        const nsACString& aOrigin, uint16_t aPort,
-                       const nsTArray<happy_eyeballs::AltSvc>* aAltSvc) {
-    return happy_eyeballs::create((const HappyEyeballs**)aHappyEyeballs,
-                                  &aOrigin, aPort, aAltSvc);
+                       const nsTArray<happy_eyeballs::AltSvc>* aAltSvc,
+                       happy_eyeballs::IpPreference aPref) {
+    return happy_eyeballs::happy_eyeballs_create(
+        (const HappyEyeballs**)aHappyEyeballs, &aOrigin, aPort, aAltSvc, aPref);
   }
 
-  void AddRef() { happy_eyeballs::addref(this); }
-  void Release() { happy_eyeballs::release(this); }
+  void AddRef() { happy_eyeballs::happy_eyeballs_addref(this); }
+  void Release() { happy_eyeballs::happy_eyeballs_release(this); }
 
  private:
   HappyEyeballs() = delete;

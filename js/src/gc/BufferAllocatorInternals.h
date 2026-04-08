@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -9,7 +7,7 @@
 #ifndef gc_BufferAllocatorInternals_h
 #define gc_BufferAllocatorInternals_h
 
-#include "mozilla/MathAlgorithms.h"
+#include <bit>
 
 #include "NamespaceImports.h"
 
@@ -121,7 +119,7 @@ class js::gc::AtomicBitmap<N>::Iter {
       word = bitmap.getWord(wordIndex);
     }
 
-    bitIndex = mozilla::CountTrailingZeroes(word);
+    bitIndex = std::countr_zero(word);
     bit = wordIndex * bitsPerWord + bitIndex;
   }
 
@@ -205,8 +203,8 @@ class BufferAllocator::ChunkLists::ChunkIter
 template <typename Derived, size_t Size, size_t Granularity>
 struct AllocSpace {
   static_assert(Size > Granularity);
-  static_assert(mozilla::IsPowerOfTwo(Size));
-  static_assert(mozilla::IsPowerOfTwo(Granularity));
+  static_assert(std::has_single_bit(Size));
+  static_assert(std::has_single_bit(Granularity));
   static constexpr size_t SizeBytes = Size;
   static constexpr size_t GranularityBytes = Granularity;
 

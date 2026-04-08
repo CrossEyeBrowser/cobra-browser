@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -3133,15 +3131,6 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
   // 3.2. Set the Document's target element to target.
   esm->SetContentState(target, ElementState::URLTARGET);
 
-  // TODO: Spec probably needs a section to account for this.
-  if (ScrollContainerFrame* rootScroll = GetRootScrollContainerFrame()) {
-    if (rootScroll->DidHistoryRestore()) {
-      // Scroll position restored from history trumps scrolling to anchor.
-      aScroll = false;
-      rootScroll->ClearDidHistoryRestore();
-    }
-  }
-
   if (target) {
     // 3.4 Run the ancestor revealing algorithm on target.
     ErrorResult rv;
@@ -3414,28 +3403,24 @@ static bool ComputeNeedToScroll(WhenToScroll aWhenToScroll, nscoord aLineSize,
 
 static nscoord ComputeWhereToScroll(WhereToScroll aWhereToScroll,
                                     nscoord aOriginalCoord, nscoord aRectMin,
-                                    nscoord aRectMax, nscoord aViewMin,
-                                    nscoord aViewMax, nscoord* aRangeMin,
-                                    nscoord* aRangeMax) {
+                                    nscoord aRectMax, nscoord aViewSize,
+                                    nscoord aScrollMin, nscoord aScrollMax) {
   nscoord resultCoord = aOriginalCoord;
-  nscoord scrollPortLength = aViewMax - aViewMin;
   if (!aWhereToScroll.mPercentage) {
     // Scroll the minimum amount necessary to show as much as possible of the
     // frame. If the frame is too large, don't hide any initially visible part
     // of it.
-    nscoord min = std::min(aRectMin, aRectMax - scrollPortLength);
-    nscoord max = std::max(aRectMin, aRectMax - scrollPortLength);
+    nscoord min = std::min(aRectMin, aRectMax - aViewSize);
+    nscoord max = std::max(aRectMin, aRectMax - aViewSize);
     resultCoord = std::clamp(aOriginalCoord, min, max);
   } else {
     float percent = aWhereToScroll.mPercentage.value() / 100.0f;
     nscoord frameAlignCoord =
         NSToCoordRound(aRectMin + (aRectMax - aRectMin) * percent);
-    resultCoord = NSToCoordRound(frameAlignCoord - scrollPortLength * percent);
+    resultCoord = NSToCoordRound(frameAlignCoord - aViewSize * percent);
   }
-  // Force the scroll range to extend to include resultCoord.
-  *aRangeMin = std::min(resultCoord, aRectMax - scrollPortLength);
-  *aRangeMax = std::max(resultCoord, aRectMin);
-  return resultCoord;
+  // Clamp scroll offset to the viable range.
+  return std::clamp(resultCoord, aScrollMin, aScrollMax);
 }
 
 static WhereToScroll GetApplicableWhereToScroll(
@@ -3481,6 +3466,25 @@ static ScrollMode GetScrollModeForScrollIntoView(
   return aScrollContainerFrame->ScrollModeForScrollBehavior(behavior);
 }
 
+struct ScrollPointRange {
+  nscoord mCoord;
+  nscoord mMin;
+  nscoord mMax;
+};
+
+static ScrollPointRange ComputeWhereToScrollAndRange(
+    WhereToScroll aWhereToScroll, nscoord aOriginalCoord, nscoord aRectMin,
+    nscoord aRectMax, nscoord aViewSize, nscoord aScrollMin,
+    nscoord aScrollMax) {
+  const auto coord =
+      ComputeWhereToScroll(aWhereToScroll, aOriginalCoord, aRectMin, aRectMax,
+                           aViewSize, aScrollMin, aScrollMax);
+
+  const auto min = std::min(coord, aRectMax - aViewSize);
+  const auto max = std::max(coord, aRectMin) - min;
+  return ScrollPointRange{coord, min, max};
+}
+
 /**
  * This function takes a scroll container frame, a rect in the coordinate system
  * of the scrolled frame, and a desired percentage-based scroll
@@ -3523,8 +3527,8 @@ static Maybe<nsPoint> ScrollToShowRect(
     lineSize = aScrollContainerFrame->GetLineScrollAmount();
   }
   ScrollStyles ss = aScrollContainerFrame->GetScrollStyles();
-  nsRect allowedRange(scrollPt, nsSize(0, 0));
-
+  nsRect scrollRange(scrollPt, nsSize(0, 0));
+  const auto scrollConstraint = aScrollContainerFrame->GetVisualScrollRange();
   if ((aScrollFlags & ScrollFlags::ScrollOverflowHidden) ||
       ss.mVertical != StyleOverflow::Hidden) {
     if (ComputeNeedToScroll(aVertical.mWhenToScroll, lineSize.height, aRect.y,
@@ -3535,12 +3539,13 @@ static Maybe<nsPoint> ScrollToShowRect(
           aScrollContainerFrame, aScrollableFrame, aTarget,
           ScrollDirection::eVertical, aVertical.mWhereToScroll);
 
-      nscoord maxHeight;
-      scrollPt.y = ComputeWhereToScroll(
+      const auto result = ComputeWhereToScrollAndRange(
           whereToScroll, scrollPt.y, rectToScrollIntoView.y,
-          rectToScrollIntoView.YMost(), visibleRect.y, visibleRect.YMost(),
-          &allowedRange.y, &maxHeight);
-      allowedRange.height = maxHeight - allowedRange.y;
+          rectToScrollIntoView.YMost(), visibleRect.height, scrollConstraint.y,
+          scrollConstraint.YMost());
+      scrollPt.y = result.mCoord;
+      scrollRange.y = result.mMin;
+      scrollRange.height = result.mMax;
     }
   }
 
@@ -3554,12 +3559,13 @@ static Maybe<nsPoint> ScrollToShowRect(
           aScrollContainerFrame, aScrollableFrame, aTarget,
           ScrollDirection::eHorizontal, aHorizontal.mWhereToScroll);
 
-      nscoord maxWidth;
-      scrollPt.x = ComputeWhereToScroll(
+      const auto result = ComputeWhereToScrollAndRange(
           whereToScroll, scrollPt.x, rectToScrollIntoView.x,
-          rectToScrollIntoView.XMost(), visibleRect.x, visibleRect.XMost(),
-          &allowedRange.x, &maxWidth);
-      allowedRange.width = maxWidth - allowedRange.x;
+          rectToScrollIntoView.XMost(), visibleRect.width, scrollConstraint.x,
+          scrollConstraint.XMost());
+      scrollPt.x = result.mCoord;
+      scrollRange.x = result.mMin;
+      scrollRange.width = result.mMax;
     }
   }
 
@@ -3573,7 +3579,7 @@ static Maybe<nsPoint> ScrollToShowRect(
       GetScrollModeForScrollIntoView(aScrollContainerFrame, aScrollFlags);
   nsIFrame* frame = do_QueryFrame(aScrollContainerFrame);
   AutoWeakFrame weakFrame(frame);
-  aScrollContainerFrame->ScrollTo(scrollPt, scrollMode, &allowedRange,
+  aScrollContainerFrame->ScrollTo(scrollPt, scrollMode, &scrollRange,
                                   ScrollSnapFlags::IntendedEndPosition,
                                   aScrollFlags & ScrollFlags::TriggeredByScript
                                       ? ScrollTriggeredByScript::Yes
@@ -3805,24 +3811,21 @@ void PresShell::ScrollFrameIntoVisualViewport(
     // position. Otherwise if we've already scrolled, this scrollIntoView
     // operation will jump back to near (0, 0) position.
     nsPoint layoutOffset = rootScrollContainer->GetScrollPosition();
+    const auto scrollRange = rootScrollContainer->GetVisualScrollRange();
 
     const nsRect visibleRect(layoutOffset, visualViewportSize);
-    nscoord unusedRangeMinOutparam;
-    nscoord unusedRangeMaxOutparam;
     nscoord x = ComputeWhereToScroll(
         aScrollFlags & ScrollFlags::ForZoomToFocusedInput
             ? WhereToScroll::Nearest
             : aHorizontal.mWhereToScroll,
         layoutOffset.x, aPositionFixedRect.x, aPositionFixedRect.XMost(),
-        visibleRect.x, visibleRect.XMost(), &unusedRangeMinOutparam,
-        &unusedRangeMaxOutparam);
+        visibleRect.width, scrollRange.x, scrollRange.XMost());
     nscoord y = ComputeWhereToScroll(
         aScrollFlags & ScrollFlags::ForZoomToFocusedInput
             ? WhereToScroll::Nearest
             : aVertical.mWhereToScroll,
         layoutOffset.y, aPositionFixedRect.y, aPositionFixedRect.YMost(),
-        visibleRect.y, visibleRect.YMost(), &unusedRangeMinOutparam,
-        &unusedRangeMaxOutparam);
+        visibleRect.height, scrollRange.y, scrollRange.YMost());
 
     layoutOffset.x += x;
     layoutOffset.y += y;
@@ -3920,10 +3923,6 @@ bool PresShell::ScrollFrameIntoView(
       return *aKnownRectRelativeToTarget;
     }
     MaybeSkipPaddingSides(aTargetFrame);
-    const nsPoint stickyOffset =
-        aTargetFrame->IsStickyPositioned()
-            ? aTargetFrame->GetNormalPosition() - aTargetFrame->GetPosition()
-            : nsPoint();
     while (nsIFrame* parent = container->GetParent()) {
       if (isPositionFixed(container)) {
         positionFixedFrame = container;
@@ -3963,7 +3962,7 @@ bool PresShell::ScrollFrameIntoView(
       } while ((frame = frame->GetNextContinuation()));
     }
 
-    return targetFrameBounds + stickyOffset;
+    return targetFrameBounds;
   }();
   bool didScroll = false;
   const nsIFrame* target = aTargetFrame;
@@ -4025,8 +4024,7 @@ bool PresShell::ScrollFrameIntoView(
       rect =
           nsLayoutUtils::TransformFrameRectToAncestor(container, rect, parent);
     } else {
-      rect += container->IsStickyPositioned() ? container->GetNormalPosition()
-                                              : container->GetPosition();
+      rect += container->GetPosition();
     }
     if (!parent && !(aScrollFlags & ScrollFlags::ScrollNoParentFrames)) {
       nsPoint extraOffset(0, 0);
@@ -4884,7 +4882,10 @@ nsresult PresShell::RenderDocument(const nsRect& aRect,
 
   nsLayoutUtils::PaintFrame(aThebesContext, rootFrame, nsRegion(aRect),
                             aBackgroundColor,
-                            nsDisplayListBuilderMode::Painting, flags);
+                            (aFlags & RenderDocumentFlags::ForPrinting)
+                                ? nsDisplayListBuilderMode::PaintForPrinting
+                                : nsDisplayListBuilderMode::Painting,
+                            flags);
 
   return NS_OK;
 }
@@ -5082,6 +5083,9 @@ UniquePtr<RangePaintInfo> PresShell::CreateRangePaintInfo(
     // XXX deal with frame being null due to display:contents
     for (; frame;
          frame = nsLayoutUtils::GetNextContinuationOrIBSplitSibling(frame)) {
+      if (frame->HasAnyStateBits(NS_FRAME_IS_NONDISPLAY)) {
+        continue;
+      }
       info->mBuilder.SetVisibleRect(frame->InkOverflowRect());
       info->mBuilder.SetDirtyRect(frame->InkOverflowRect());
       frame->BuildDisplayListForStackingContext(&info->mBuilder, &info->mList);
@@ -11246,10 +11250,10 @@ void ReflowCountMgr::DoGrandHTMLTotals() {
     }
   });
 
-  static const char* title[] = {"Class", "Reflows"};
+  static const char* titles[] = {"Class", "Reflows"};
   fprintf(mFD, "<tr>");
-  for (uint32_t i = 0; i < std::size(title); i++) {
-    fprintf(mFD, "<td><center><b>%s<b></center></td>", title[i]);
+  for (const char* title : titles) {
+    fprintf(mFD, "<td><center><b>%s<b></center></td>", title);
   }
   fprintf(mFD, "</tr>\n");
 
@@ -11361,6 +11365,21 @@ nsIFrame* PresShell::GetAnchorPosAnchor(
         aName, aPositionedFrame, entry.Data());
   }
   return nullptr;
+}
+
+void PresShell::CollectAnchorNames(const nsIFrame* aPositionedFrame,
+                                   nsTArray<nsString>& aResult) {
+  const auto* pos = aPositionedFrame->StylePosition();
+  StyleCascadeLevel anchorTreeScope = pos->mPositionAnchor.scope;
+
+  for (auto iter = mAnchorPosAnchors.Iter(); !iter.Done(); iter.Next()) {
+    const auto& name = iter.Key();
+    ScopedNameRef scopedName{name, anchorTreeScope};
+    if (AnchorPositioningUtils::FindFirstAcceptableAnchor(
+            scopedName, aPositionedFrame, iter.Data())) {
+      aResult.AppendElement(nsDependentAtomString(name));
+    }
+  }
 }
 
 void PresShell::AddAnchorPosAnchorImpl(const nsAtom* aName, nsIFrame* aFrame,
@@ -12664,16 +12683,15 @@ void PresShell::EventHandler::EventTargetData::UpdateWheelEventTarget(
     return;
   }
 
-  // If dom.event.wheel-event-groups.enabled is not set or the stored
-  // event target is removed, we will not get a event target frame from the
-  // wheel transaction here.
+  // If the stored event target is removed, we will not get an event target
+  // frame from the wheel transaction here.
   nsIFrame* groupFrame = WheelTransaction::GetEventTargetFrame();
   if (!groupFrame) {
     return;
   }
 
-  // If dom.event.wheel-event-groups.enabled is set and whe have a stored
-  // event target from the wheel transaction, override the event target.
+  // If we have a stored event target from the wheel transaction, override
+  // the event target.
   SetFrameAndComputePresShellAndContent(groupFrame, aGUIEvent);
 }
 

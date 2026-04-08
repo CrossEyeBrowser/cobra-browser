@@ -13,6 +13,7 @@ import mozilla.components.concept.engine.Engine
 import mozilla.components.feature.awesomebar.provider.BookmarksStorageSuggestionProvider
 import mozilla.components.feature.awesomebar.provider.CombinedHistorySuggestionProvider
 import mozilla.components.feature.awesomebar.provider.DEFAULT_RECENT_SEARCH_SUGGESTION_LIMIT
+import mozilla.components.feature.awesomebar.provider.FlightsOnlineSuggestionProvider
 import mozilla.components.feature.awesomebar.provider.HistoryStorageSuggestionProvider
 import mozilla.components.feature.awesomebar.provider.RecentSearchSuggestionsProvider
 import mozilla.components.feature.awesomebar.provider.SearchActionProvider
@@ -20,9 +21,12 @@ import mozilla.components.feature.awesomebar.provider.SearchEngineSuggestionProv
 import mozilla.components.feature.awesomebar.provider.SearchSuggestionProvider
 import mozilla.components.feature.awesomebar.provider.SearchTermSuggestionsProvider
 import mozilla.components.feature.awesomebar.provider.SessionSuggestionProvider
+import mozilla.components.feature.awesomebar.provider.SportsOnlineSuggestionProvider
 import mozilla.components.feature.awesomebar.provider.StocksOnlineSuggestionProvider
 import mozilla.components.feature.awesomebar.provider.TrendingSearchProvider
 import mozilla.components.feature.fxsuggest.FxSuggestSuggestionProvider
+import mozilla.components.feature.fxsuggest.MockedFlightsSuggestionDataSource
+import mozilla.components.feature.fxsuggest.MockedSportsSuggestionDataSource
 import mozilla.components.feature.fxsuggest.MockedStocksSuggestionDataSource
 import mozilla.components.feature.search.SearchUseCases
 import mozilla.components.feature.session.SessionUseCases.LoadUrlUseCase
@@ -33,6 +37,7 @@ import mozilla.components.support.ktx.android.net.sameHostWithoutMobileSubdomain
 import mozilla.components.support.ktx.kotlin.tryGetHostFromUrl
 import mozilla.components.support.ktx.kotlin.urlContainsQueryParameters
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
+import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.components.Components
 import org.mozilla.fenix.components.Core.Companion.METADATA_HISTORY_SUGGESTION_LIMIT
 import org.mozilla.fenix.components.Core.Companion.METADATA_SHORTCUT_SUGGESTION_LIMIT
@@ -45,20 +50,18 @@ import org.mozilla.fenix.search.SearchEngineSource
 @Suppress("LongParameterList")
 class SearchSuggestionsProvidersBuilder(
     private val components: Components,
+    private val browsingModeManager: BrowsingModeManager,
     private val includeSelectedTab: Boolean,
     private val loadUrlUseCase: LoadUrlUseCase,
     private val searchUseCase: SearchUseCases.SearchUseCase,
     private val selectTabUseCase: TabsUseCases.SelectTabUseCase,
     private val suggestionsStringsProvider: SuggestionsStringsProvider,
     private val suggestionIconProvider: SuggestionIconProvider,
-    onSearchEngineShortcutSelected: (searchEngine: SearchEngine) -> Unit,
     onSearchEngineSuggestionSelected: (searchEngine: SearchEngine) -> Unit,
-    onSearchEngineSettingsClicked: () -> Unit,
 ) {
     val engineForSpeculativeConnects: Engine?
     val defaultHistoryStorageProvider: HistoryStorageSuggestionProvider
     val defaultCombinedHistoryProvider: CombinedHistorySuggestionProvider
-    val shortcutsEnginePickerProvider: ShortcutsSuggestionProvider
     val defaultSearchSuggestionProvider: SearchSuggestionProvider
     val defaultTrendingSearchProvider: TrendingSearchProvider
     val defaultSearchActionProvider: SearchActionProvider
@@ -66,7 +69,7 @@ class SearchSuggestionsProvidersBuilder(
     val searchSuggestionProviderMap: MutableMap<SearchEngine, List<AwesomeBar.SuggestionProvider>>
 
     init {
-        engineForSpeculativeConnects = when (components.appStore.state.mode) {
+        engineForSpeculativeConnects = when (browsingModeManager.mode) {
             BrowsingMode.Normal -> components.core.engine
             BrowsingMode.Private -> null
         }
@@ -107,14 +110,14 @@ class SearchSuggestionsProvidersBuilder(
                 showDescription = false,
                 engine = engineForSpeculativeConnects,
                 filterExactMatch = true,
-                private = components.appStore.state.mode.isPrivate,
+                private = browsingModeManager.mode.isPrivate,
                 suggestionsHeader = suggestionsStringsProvider.forSearchEngineSuggestion(),
             )
 
         defaultTrendingSearchProvider =
             TrendingSearchProvider(
                 fetchClient = components.core.client,
-                privateMode = components.appStore.state.mode.isPrivate,
+                privateMode = browsingModeManager.mode.isPrivate,
                 searchUseCase = searchUseCase,
                 icon = searchBitmap,
             )
@@ -126,15 +129,6 @@ class SearchSuggestionsProvidersBuilder(
                 icon = searchBitmap,
                 showDescription = false,
                 suggestionsHeader = suggestionsStringsProvider.forSearchEngineSuggestion(),
-            )
-
-        shortcutsEnginePickerProvider =
-            ShortcutsSuggestionProvider(
-                store = components.core.store,
-                settingsIcon = suggestionIconProvider.getSettingsIconBitmap(),
-                searchShortcutsSettingsTitle = suggestionsStringsProvider.searchShortcutsSettingsTitle(),
-                selectShortcutEngine = onSearchEngineShortcutSelected,
-                selectShortcutEngineSettings = onSearchEngineSettingsClicked,
             )
 
         searchEngineSuggestionProvider =
@@ -226,12 +220,12 @@ class SearchSuggestionsProvidersBuilder(
             }
         }
 
-        if (!components.appStore.state.mode.isPrivate && state.showAllSessionSuggestions) {
+        if (!browsingModeManager.mode.isPrivate && state.showAllSessionSuggestions) {
             // Unlike other providers, we don't exclude sponsored suggestions for open tabs.
             providersToAdd.add(getLocalTabsProvider())
         }
 
-        if (!components.appStore.state.mode.isPrivate && state.showSessionSuggestionsForCurrentEngine) {
+        if (!browsingModeManager.mode.isPrivate && state.showSessionSuggestionsForCurrentEngine) {
             getFilterForCurrentEngineResults(state)?.let {
                 providersToAdd.add(getLocalTabsProvider(it))
             }
@@ -267,6 +261,26 @@ class SearchSuggestionsProvidersBuilder(
                 StocksOnlineSuggestionProvider(
                     searchUseCase = searchUseCase,
                     dataSource = MockedStocksSuggestionDataSource(),
+                    suggestionsHeader = suggestionsStringsProvider.firefoxSuggestOnlineHeader,
+                ),
+            )
+        }
+
+        if (state.showSportsSuggestions) {
+            providersToAdd.add(
+                SportsOnlineSuggestionProvider(
+                    searchUseCase = searchUseCase,
+                    dataSource = MockedSportsSuggestionDataSource(),
+                    suggestionsHeader = suggestionsStringsProvider.firefoxSuggestOnlineHeader,
+                ),
+            )
+        }
+
+        if (state.showFlightsSuggestions) {
+            providersToAdd.add(
+                FlightsOnlineSuggestionProvider(
+                    searchUseCase = searchUseCase,
+                    dataSource = MockedFlightsSuggestionDataSource(),
                     suggestionsHeader = suggestionsStringsProvider.firefoxSuggestOnlineHeader,
                 ),
             )
@@ -391,7 +405,7 @@ class SearchSuggestionsProvidersBuilder(
         return searchSuggestionProviderMap.getOrPut(engine) {
             val searchBitmap = suggestionIconProvider.getSearchIconBitmap()
 
-            val engineForSpeculativeConnects = when (components.appStore.state.mode.isPrivate) {
+            val engineForSpeculativeConnects = when (browsingModeManager.mode.isPrivate) {
                 true -> null
                 else -> components.core.engine
             }
@@ -412,7 +426,7 @@ class SearchSuggestionsProvidersBuilder(
                     icon = searchBitmap,
                     engine = engineForSpeculativeConnects,
                     filterExactMatch = true,
-                    private = components.appStore.state.mode.isPrivate,
+                    private = browsingModeManager.mode.isPrivate,
                 ),
             )
         }
@@ -510,7 +524,6 @@ class SearchSuggestionsProvidersBuilder(
     /**
      * Data based on which the search suggestions providers list should be built.
      *
-     * @property showSearchShortcuts Whether to show the search shortcuts.
      * @property showSearchTermHistory Whether to show the search term history.
      * @property showHistorySuggestionsForCurrentEngine Whether to show history suggestions
      * for the current search engine.
@@ -528,12 +541,13 @@ class SearchSuggestionsProvidersBuilder(
      * @property showSponsoredSuggestions Whether to show sponsored suggestions.
      * @property showNonSponsoredSuggestions Whether to show non-sponsored suggestions.
      * @property showStocksSuggestions Whether to show optimized search suggestion stock cards.
+     * @property showSportsSuggestions Whether to show optimized search suggestion sport cards.
+     * @property showFlightsSuggestions Whether to show optimized search suggestion flight cards.
      * @property showTrendingSearches Whether to show trending searches.
      * @property showRecentSearches Whether to show recent searches.
      * @property searchEngineSource Hoe the current search engine was selected.
      */
     data class SearchProviderState(
-        val showSearchShortcuts: Boolean,
         val showSearchTermHistory: Boolean,
         val showHistorySuggestionsForCurrentEngine: Boolean,
         val showAllHistorySuggestions: Boolean,
@@ -547,6 +561,8 @@ class SearchSuggestionsProvidersBuilder(
         val showSponsoredSuggestions: Boolean,
         val showNonSponsoredSuggestions: Boolean,
         val showStocksSuggestions: Boolean,
+        val showSportsSuggestions: Boolean,
+        val showFlightsSuggestions: Boolean,
         val showTrendingSearches: Boolean,
         val showRecentSearches: Boolean,
         val searchEngineSource: SearchEngineSource,

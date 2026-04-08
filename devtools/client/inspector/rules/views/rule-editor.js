@@ -7,6 +7,7 @@
 const { l10n } = require("resource://devtools/shared/inspector/css-logic.js");
 const {
   PSEUDO_CLASSES,
+  ELEMENT_SPECIFIC_PSEUDO_CLASSES,
 } = require("resource://devtools/shared/css/constants.js");
 const {
   style: { ELEMENT_STYLE, PRES_HINTS },
@@ -130,6 +131,10 @@ class RuleEditor extends EventEmitter {
     if (this.#unsubscribeSourceMap) {
       this.#unsubscribeSourceMap();
     }
+
+    // Remove from the DOM so that CssRuleView can clear empty rule containers
+    this.element.remove();
+    this.element = null;
   }
 
   #sourceMapURLService;
@@ -166,6 +171,7 @@ class RuleEditor extends EventEmitter {
     this.element.dataset.ruleId = this.rule.domRule.actorID;
     this.element.setAttribute("uneditable", !this.isEditable);
     this.element.setAttribute("unmatched", this.rule.isUnmatched);
+    this.element.setAttribute("role", "article");
 
     // This is used by tests
     this.element._ruleEditor = this;
@@ -304,6 +310,8 @@ class RuleEditor extends EventEmitter {
           selectorContainer.append(this.doc.createTextNode(text));
         } else if (ancestorData.type == "starting-style") {
           selectorContainer.append(this.doc.createTextNode(`@starting-style`));
+        } else if (ancestorData.type == "appearance-base") {
+          selectorContainer.append(this.doc.createTextNode(`@appearance-base`));
         } else if (ancestorData.selectors) {
           ancestorData.selectors.forEach((selector, i) => {
             if (i !== 0) {
@@ -342,7 +350,7 @@ class RuleEditor extends EventEmitter {
       // We can't use a proper "ol" as it will mess with selection copy text,
       // adding spaces on list item instead of the one we craft (.ruleview-rule-indent)
       this.ancestorDataEl = createChild(this.element, "div", {
-        class: "ruleview-rule-ancestor-data theme-link",
+        class: "ruleview-rule-ancestor-data",
         role: "list",
       });
       this.ancestorDataEl.append(ancestorsFrag);
@@ -988,9 +996,10 @@ class RuleEditor extends EventEmitter {
           selectorClass = "ruleview-selector-element";
           break;
         case SELECTOR_PSEUDO_CLASS:
-          selectorClass = PSEUDO_CLASSES.some(
-            pseudo => selectorText.value === pseudo
-          )
+          selectorClass = [
+            ...PSEUDO_CLASSES,
+            ...Object.keys(ELEMENT_SPECIFIC_PSEUDO_CLASSES),
+          ].some(pseudo => selectorText.value === pseudo)
             ? "ruleview-selector-pseudo-class-lock"
             : "ruleview-selector-pseudo-class";
           break;
@@ -1276,7 +1285,10 @@ class RuleEditor extends EventEmitter {
 
       ruleProps.isUnmatched = !isMatching;
       const newRule = new Rule(elementStyle, ruleProps);
-      const editor = new RuleEditor(ruleView, newRule);
+      const editor = new RuleEditor(ruleView, newRule, {
+        elementsWithPendingClicks: new Set(),
+      });
+      newRule.editor = editor;
       const rules = elementStyle.rules;
 
       let newRuleIndex = applied.findIndex(r => r.rule == ruleProps.rule);
@@ -1306,6 +1318,9 @@ class RuleEditor extends EventEmitter {
       // element might be replaced).
       // Because of this, we need to handle setting the focus ourselves from here.
       editor.#moveSelectorFocus(direction);
+
+      // Destroy the current editor as it got replaced by the fresh instance
+      this.destroy();
     } catch (err) {
       this.isEditing = false;
       promiseWarn(err);

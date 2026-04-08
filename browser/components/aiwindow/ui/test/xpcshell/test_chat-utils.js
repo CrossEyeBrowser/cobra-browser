@@ -51,6 +51,8 @@ add_task(function test_parseConversationRow() {
     created_date: now,
     updated_date: now,
     status: "a status",
+    security_properties: '{"privateData": false, "untrustedInput": true}',
+    seen_urls: '["https://example.com/page1"]',
   });
 
   const conversation = parseConversationRow(testRow);
@@ -67,6 +69,18 @@ add_task(function test_parseConversationRow() {
     soft.equal(conversation.createdDate, now);
     soft.equal(conversation.updatedDate, now);
     soft.equal(conversation.status, "a status");
+    soft.ok(
+      conversation.securityProperties.untrustedInput,
+      "untrustedInput should be true"
+    );
+    soft.ok(
+      !conversation.securityProperties.privateData,
+      "privateData should be false"
+    );
+    soft.ok(
+      conversation.seenUrls.has("https://example.com/page1"),
+      "seenUrls should contain the persisted URL"
+    );
   });
 });
 
@@ -108,6 +122,7 @@ add_task(function test_parseConversationRow() {
     memories_flag_source: 1,
     memories_applied: '{ "some": "memories" }',
     web_search_queries: '{ "some": "web search queries" }',
+    page_history_deleted: false,
   });
 
   const rows = parseMessageRows([testRow]);

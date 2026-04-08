@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
@@ -348,7 +346,7 @@ JS_PUBLIC_API void js::NotifyAnimationActivity(JSObject* obj) {
 
   auto timeNow = mozilla::TimeStamp::Now();
   obj->as<GlobalObject>().realm()->lastAnimationTime = timeNow;
-  obj->runtimeFromMainThread()->lastAnimationTime = timeNow;
+  obj->runtimeFromMainThread()->gc.setLastAnimationTime(timeNow);
 }
 
 JS_PUBLIC_API bool js::IsObjectInContextCompartment(JSObject* obj,
@@ -544,11 +542,11 @@ JS_PUBLIC_API void js::TraceGrayWrapperTargets(JSTracer* trc, Zone* zone) {
   JS::AutoSuppressGCAnalysis nogc;
 
   for (CompartmentsInZoneIter comp(zone); !comp.done(); comp.next()) {
-    for (Compartment::ObjectWrapperEnum e(comp); !e.empty(); e.popFront()) {
-      JSObject* target = e.front().key();
+    for (auto iter = comp->objectWrapperMappings(); !iter.done(); iter.next()) {
+      JSObject* target = iter.get().key();
       if (target->isMarkedGray()) {
         TraceManuallyBarrieredEdge(trc, &target, "gray CCW target");
-        MOZ_ASSERT(target == e.front().key());
+        MOZ_ASSERT(target == iter.get().key());
       }
     }
   }

@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -67,6 +65,7 @@
 #include "mozilla/dom/HTMLInputElement.h"
 #include "mozilla/dom/HTMLLabelElement.h"
 #include "mozilla/dom/MouseEventBinding.h"
+#include "mozilla/dom/PerformanceMainThread.h"
 #include "mozilla/dom/PointerEventHandler.h"
 #include "mozilla/dom/PopoverData.h"
 #include "mozilla/dom/Record.h"
@@ -158,7 +157,7 @@ static TimeStamp gLastCursorUpdateTime;
 static TimeStamp gTypingStartTime;
 static TimeStamp gTypingEndTime;
 static int32_t gTypingInteractionKeyPresses = 0;
-MOZ_RUNINIT static dom::InteractionData gTypingInteraction = {};
+constinit static dom::InteractionData gTypingInteraction = {};
 
 static inline int32_t RoundDown(double aDouble) {
   return (aDouble > 0) ? static_cast<int32_t>(floor(aDouble))
@@ -3632,17 +3631,15 @@ void EventStateManager::DoScrollText(
     actualDevPixelScrollAmount.y = 0;
   }
 
-  ScrollSnapFlags snapFlags = ScrollSnapFlags::Disabled;
+  ScrollSnapFlags snapFlags = ScrollSnapFlags::IntendedDirection;
   mozilla::ScrollOrigin origin = mozilla::ScrollOrigin::NotSpecified;
   switch (aEvent->mDeltaMode) {
     case WheelEvent_Binding::DOM_DELTA_LINE:
       origin = mozilla::ScrollOrigin::MouseWheel;
-      snapFlags = ScrollSnapFlags::IntendedDirection;
       break;
     case WheelEvent_Binding::DOM_DELTA_PAGE:
       origin = mozilla::ScrollOrigin::Pages;
-      snapFlags = ScrollSnapFlags::IntendedDirection |
-                  ScrollSnapFlags::IntendedEndPosition;
+      snapFlags |= ScrollSnapFlags::IntendedEndPosition;
       break;
     case WheelEvent_Binding::DOM_DELTA_PIXEL:
       origin = mozilla::ScrollOrigin::Pixels;
@@ -4272,6 +4269,19 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
         frameSelection->SetDragState(false);
       }
     } break;
+    case eContextMenu: {
+      // If the context menu event was not prevented, a context menu is about
+      // to be shown. Record a fallback time now so that pending event timing
+      // entries (pointerdown, mousedown, etc.) are not inflated by the time
+      // the user spends interacting with the menu.
+      // https://github.com/w3c/event-timing/issues/154
+      if (!aEvent->DefaultPrevented() && aEvent->IsTrusted()) {
+        if (auto* perf = aPresContext->GetPerformanceMainThread()) {
+          perf->RecordModalFallbackTime();
+        }
+      }
+      break;
+    }
     case eWheelOperationEnd: {
       MOZ_ASSERT(aEvent->IsTrusted());
       ScrollbarsForWheel::MayInactivate();
@@ -4389,8 +4399,7 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
         case WheelPrefs::ACTION_NONE:
         default:
           bool allDeltaOverflown = false;
-          if (StaticPrefs::dom_event_wheel_event_groups_enabled() &&
-              (wheelEvent->mDeltaX != 0.0 || wheelEvent->mDeltaY != 0.0)) {
+          if (wheelEvent->mDeltaX != 0.0 || wheelEvent->mDeltaY != 0.0) {
             if (scrollTarget) {
               WheelTransaction::WillHandleDefaultAction(
                   wheelEvent, scrollTarget, mCurrentTarget);

@@ -1,6 +1,4 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=8 sts=2 et sw=2 tw=80:
- *
+/*
  * Copyright 2016 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -423,18 +421,18 @@ static int32_t PerformWait(Instance* instance, uint32_t memoryIndex,
                            PtrT byteOffset, ValT value, int64_t timeout_ns) {
   JSContext* cx = instance->cx();
 
-  if (!instance->memory(memoryIndex)->isShared()) {
-    ReportTrapError(cx, JSMSG_WASM_NONSHARED_WAIT);
-    return -1;
-  }
-
   if (byteOffset & (sizeof(ValT) - 1)) {
     ReportTrapError(cx, JSMSG_WASM_UNALIGNED_ACCESS);
     return -1;
   }
 
-  if (byteOffset + sizeof(ValT) >
-      instance->memory(memoryIndex)->volatileMemoryLength()) {
+  if (!instance->memory(memoryIndex)->isShared()) {
+    ReportTrapError(cx, JSMSG_WASM_NONSHARED_WAIT);
+    return -1;
+  }
+
+  size_t memSizeBytes = instance->memory(memoryIndex)->volatileMemoryLength();
+  if (memSizeBytes < sizeof(ValT) || byteOffset > memSizeBytes - sizeof(ValT)) {
     ReportTrapError(cx, JSMSG_WASM_OUT_OF_BOUNDS);
     return -1;
   }
@@ -498,16 +496,14 @@ static int32_t PerformWake(Instance* instance, PtrT byteOffset, int32_t count,
                            uint32_t memoryIndex) {
   JSContext* cx = instance->cx();
 
-  // The alignment guard is not in the wasm spec as of 2017-11-02, but is
-  // considered likely to appear, as 4-byte alignment is required for WAKE by
-  // the spec's validation algorithm.
-
   if (byteOffset & 3) {
     ReportTrapError(cx, JSMSG_WASM_UNALIGNED_ACCESS);
     return -1;
   }
 
-  if (byteOffset >= instance->memory(memoryIndex)->volatileMemoryLength()) {
+  size_t memSizeBytes = instance->memory(memoryIndex)->volatileMemoryLength();
+  if (memSizeBytes < sizeof(int32_t) ||
+      byteOffset > memSizeBytes - sizeof(int32_t)) {
     ReportTrapError(cx, JSMSG_WASM_OUT_OF_BOUNDS);
     return -1;
   }
@@ -926,30 +922,18 @@ static int32_t MemoryInit(JSContext* cx, Instance* instance,
     return -1;
   }
 
-  bool isOOM = false;
-
   if (&srcTable == &dstTable && dstOffset > srcOffset) {
     for (uint32_t i = len; i > 0; i--) {
-      if (!dstTable->copy(cx, *srcTable, dstOffset + (i - 1),
-                          srcOffset + (i - 1))) {
-        isOOM = true;
-        break;
-      }
+      dstTable->copy(*srcTable, dstOffset + (i - 1), srcOffset + (i - 1));
     }
   } else if (&srcTable == &dstTable && dstOffset == srcOffset) {
     // No-op
   } else {
     for (uint32_t i = 0; i < len; i++) {
-      if (!dstTable->copy(cx, *srcTable, dstOffset + i, srcOffset + i)) {
-        isOOM = true;
-        break;
-      }
+      dstTable->copy(*srcTable, dstOffset + i, srcOffset + i);
     }
   }
 
-  if (isOOM) {
-    return -1;
-  }
   return 0;
 }
 
@@ -2134,7 +2118,7 @@ int32_t Instance::stringCharCodeAt(Instance* instance, void* stringArg,
   char16_t c;
   if (!string->getChar(cx, index, &c)) {
     MOZ_ASSERT(cx->isThrowingOutOfMemory());
-    return false;
+    return -1;
   }
   return c;
 }
@@ -2158,7 +2142,7 @@ int32_t Instance::stringCodePointAt(Instance* instance, void* stringArg,
   char32_t c;
   if (!string->getCodePoint(cx, index, &c)) {
     MOZ_ASSERT(cx->isThrowingOutOfMemory());
-    return false;
+    return -1;
   }
   return c;
 }
@@ -2237,15 +2221,14 @@ int32_t Instance::stringEquals(Instance* instance, void* firstStringArg,
   AnyRef firstStringRef = AnyRef::fromCompiledCode(firstStringArg);
   AnyRef secondStringRef = AnyRef::fromCompiledCode(secondStringArg);
 
-  // Null strings are considered equals
-  if (firstStringRef.isNull() || secondStringRef.isNull()) {
-    return firstStringRef.isNull() == secondStringRef.isNull();
-  }
-
-  // Otherwise, rule out any other kind of reference value
-  if (!firstStringRef.isJSString() || !secondStringRef.isJSString()) {
+  if ((!firstStringRef.isNull() && !firstStringRef.isJSString()) ||
+      (!secondStringRef.isNull() && !secondStringRef.isJSString())) {
     ReportTrapError(cx, JSMSG_WASM_BAD_CAST);
     return -1;
+  }
+
+  if (firstStringRef.isNull() || secondStringRef.isNull()) {
+    return firstStringRef.isNull() == secondStringRef.isNull() ? 1 : 0;
   }
 
   bool equals;
@@ -2283,6 +2266,117 @@ int32_t Instance::stringCompare(Instance* instance, void* firstStringArg,
     return 1;
   }
   return result;
+}
+
+void Instance::addSubI128(Instance* instance, uint32_t isAdd) {
+#ifndef JS_64BIT
+  static_assert(sizeof(instance->baselineScratchWords_[0]) == sizeof(uint32_t));
+  static_assert(N_BASELINE_SCRATCH_WORDS >= 8);
+  // Compute
+  //
+  //   baselineScratchWords_[3:0] += baselineScratchWords_[7:4] (isAdd[0] == 1)
+  // or
+  //   baselineScratchWords_[3:0] -= baselineScratchWords_[7:4] (isAdd[0] == 0)
+  //
+  // where entries [3:0] contain a 128-bit integer stored as 32-bit chunks,
+  // with [0] holding the least significant chunk and [3] holding the most
+  // significant, and the same for [7:4].  That is to say, from a 32-bit chunk
+  // perspective, they are stored in baselineScratchWords_ little-endianly.
+  // (Each chunk is itself stored in the endianness of the host; that does not
+  // concern us here.)
+  if (isAdd & 1) {
+    uint32_t carryIn = 0;
+    for (int i = 0; i < 4; i++) {
+      uint32_t argL = instance->baselineScratchWords_[i + 0];
+      uint32_t argR = instance->baselineScratchWords_[i + 4];
+      uint32_t sum = argL + argR + carryIn;
+      instance->baselineScratchWords_[i + 0] = sum;
+      uint32_t carryOut = carryIn ? (sum <= argL) : (sum < argL);
+      carryIn = carryOut;
+    }
+  } else {
+    uint32_t borrowIn = 0;
+    for (int i = 0; i < 4; i++) {
+      uint32_t argL = instance->baselineScratchWords_[i + 0];
+      uint32_t argR = instance->baselineScratchWords_[i + 4];
+      uint32_t diff = argL - argR - borrowIn;
+      instance->baselineScratchWords_[i + 0] = diff;
+      uint32_t borrowOut = borrowIn ? (argL <= argR) : (argL < argR);
+      borrowIn = borrowOut;
+    }
+  }
+#else
+  // This helper should only be called on 32-bit targets.
+  MOZ_CRASH();
+#endif  // JS_64BIT
+}
+
+void Instance::mulI64Wide(Instance* instance, uint32_t isSigned) {
+#ifndef JS_64BIT
+  static_assert(sizeof(instance->baselineScratchWords_[0]) == sizeof(uint32_t));
+  static_assert(N_BASELINE_SCRATCH_WORDS >= 4);
+  // Compute
+  //
+  //   baselineScratchWords_[3:0]
+  //     = baselineScratchWords_[1:0] *widen baselineScratchWords_[3:2]
+  //
+  // using the same storage conventions as add128/sub128 above.
+  // If `isSigned[0]` is 1, the operands are (conceptually) signedly-widened
+  // before multiplication, otherwise they are unsignedly widened.  This scheme
+  // is feasible on 32-bit targets because gcc and clang both support 64-bit
+  // arithmetic even on 32-bit targets.
+  uint64_t x = (uint64_t(instance->baselineScratchWords_[1]) << 32) |
+               uint64_t(instance->baselineScratchWords_[0]);
+  uint64_t y = (uint64_t(instance->baselineScratchWords_[3]) << 32) |
+               uint64_t(instance->baselineScratchWords_[2]);
+
+  // Compute zHi:zLo = x *widen y.  First, calculate and store zLo.
+  uint64_t zLo = x * y;
+  instance->baselineScratchWords_[0] = uint32_t(zLo >> 0);
+  instance->baselineScratchWords_[1] = uint32_t(zLo >> 32);
+
+  // Now compute and store zHi, which is much more complex.
+  uint64_t temp1 = x & 0xFFFFFFFFULL;
+  uint64_t temp2 = y & 0xFFFFFFFFULL;
+  uint64_t temp3 = temp1 * temp2;
+
+  // See Henry S. Warren, Jr's "Hackers Delight", Chapter 8 (Multiplication).
+  if (isSigned & 1) {
+    x = int64_t(x) >> 32;
+    y = int64_t(y) >> 32;
+    temp2 *= x;
+    temp1 *= y;
+    temp3 = uint64_t(temp3) >> 32;  // yes, really an unsigned shift
+    x *= y;
+    temp3 += temp2;
+    temp2 = temp3 & 0xFFFFFFFFULL;
+    temp3 = int64_t(temp3) >> 32;
+    temp1 += temp2;
+    temp3 += x;
+    temp1 = int64_t(temp1) >> 32;
+  } else {
+    // Exactly the same thing, except with unsigned instead of signed shifts.
+    x = uint64_t(x) >> 32;
+    y = uint64_t(y) >> 32;
+    temp2 *= x;
+    temp1 *= y;
+    temp3 = uint64_t(temp3) >> 32;
+    x *= y;
+    temp3 += temp2;
+    temp2 = temp3 & 0xFFFFFFFFULL;
+    temp3 = uint64_t(temp3) >> 32;
+    temp1 += temp2;
+    temp3 += x;
+    temp1 = uint64_t(temp1) >> 32;
+  }
+
+  temp3 += temp1;  // temp3 now holds zHi
+  instance->baselineScratchWords_[2] = uint32_t(temp3 >> 0);
+  instance->baselineScratchWords_[3] = uint32_t(temp3 >> 32);
+#else
+  // This helper should only be called on 32-bit targets.
+  MOZ_CRASH();
+#endif  // JS_64BIT
 }
 
 // [SMDOC] Wasm Function.prototype.call.bind optimization
@@ -2375,9 +2469,8 @@ Instance::Instance(JSContext* cx, Handle<WasmInstanceObject*> object,
       allocationMetadataBuilder_(nullptr),
       addressOfLastBufferedWholeCell_(
           cx->runtime()->gc.addressOfLastBufferedWholeCell()) {
-  for (size_t i = 0; i < N_BASELINE_SCRATCH_WORDS; i++) {
-    baselineScratchWords_[i] = 0;
-  }
+  std::fill(std::begin(baselineScratchWords_), std::end(baselineScratchWords_),
+            0);
 }
 
 Instance* Instance::create(JSContext* cx, Handle<WasmInstanceObject*> object,
@@ -3027,9 +3120,8 @@ void Instance::submitCallRefHints(uint32_t funcIndex) {
     }
 
     JS::UniqueChars countsStr;
-    for (size_t i = 0; i < CallRefMetrics::NUM_SLOTS; i++) {
-      countsStr =
-          JS_sprintf_append(std::move(countsStr), "%u ", metrics.counts[i]);
+    for (const auto& count : metrics.counts) {
+      countsStr = JS_sprintf_append(std::move(countsStr), "%u ", count);
     }
     JS::UniqueChars targetStr;
     if (skipReason) {
@@ -3138,8 +3230,8 @@ void Instance::tracePrivate(JSTracer* trc) {
     for (uint32_t i = 0; i < codeTailMeta().numCallRefMetrics; i++) {
       CallRefMetrics* metrics = &callRefMetrics_[i];
       MOZ_ASSERT(metrics->checkInvariants());
-      for (size_t j = 0; j < CallRefMetrics::NUM_SLOTS; j++) {
-        TraceNullableEdge(trc, &metrics->targets[j], "indirect call target");
+      for (auto& target : metrics->targets) {
+        TraceNullableEdge(trc, &target, "indirect call target");
       }
     }
   }

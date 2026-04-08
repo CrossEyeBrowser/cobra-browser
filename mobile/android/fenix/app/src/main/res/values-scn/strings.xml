@@ -826,11 +826,7 @@
   <string name="customize_addon_collection_user_hint">Prupitariu dâ ricota (ID utenti)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">A ricota dî stinneri fu canciata. L’applicazzioni s’hâ chiùjiri pi riggistrari i canci…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">Torna â scheda</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Nzingalibbra</string>
@@ -1260,10 +1256,6 @@
   <string name="studies_remove">Leva</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">Attivi</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">Prova i funzioni e i pinzati novi prima chi vennu fatti pùbblichi.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">Nzita e abbìa studi</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
   <string name="studies_learn_more">Cchiù nfurmazzioni</string>
   <!--
@@ -1625,7 +1617,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Cancia</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">Copia</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Copia</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Sparti</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -1679,12 +1671,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">Scancillasti %1$s</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">SFAI</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">SFAI</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">Scancillasti %s</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">Scancillasti %s</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">Elimenti scancillati: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">Elimenti scancillati: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">Torna nn’arrè</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">Junci na carpetta nova</string>
@@ -1931,23 +1927,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Cunfijura Firefox comu navicaturi pridifinutu</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">Prova a navicazzioni privata</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">Prova a navicazzioni privata</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">Nàvica senza sarbari viscotta o crunuluggìa nne %1$s</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">Nàvica senza sarbari viscotta o crunuluggìa nne %1$s</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">Nàvica senza lassari trazzi</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">Nàvica senza lassari trazzi</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">A navicazzioni privata di %1$s nun sarba i to nfurmazzioni.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">A navicazzioni privata di %1$s nun sarba i to nfurmazzioni.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">Accumincia câ to prima risciduta</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">Accumincia câ to prima risciduta</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">Attrova cosi agghiri di tia. O scopri quarchi cosa pi sbarijàriti.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">Attrova cosi agghiri di tia. O scopri quarchi cosa pi sbarijàriti.</string>
   <!--
     Survey
 
@@ -1998,8 +1994,6 @@
   <string name="preference_accessibility_text_size_summary">Fai u testu dî siti cchiù granni o cchiù nicu</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">Grannizza dû caràttiri</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">Grannizza autumàtica dî caràttiri</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -2906,7 +2900,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">Nun potti carricari i lingui. Cuntrolla a to cunnissioni â riti e torna a prova.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">Ni dispiaci, ancora nun suppurtamu sta lingua: %1$s.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">Ni dispiaci, ancora nun suppurtamu sta lingua: %1$s.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">Staju traducennu…</string>
   <!--
@@ -3219,6 +3213,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">Junci ê schedi privati</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 

@@ -12,7 +12,7 @@ import io.mockk.MockKAnnotations
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
-import io.mockk.impl.annotations.MockK
+import io.mockk.impl.annotations.RelaxedMockK
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
@@ -61,6 +61,8 @@ import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.TabsTray
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
+import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
+import org.mozilla.fenix.browser.browsingmode.DefaultBrowsingModeManager
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.TabCollectionStorage
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
@@ -83,25 +85,28 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class) // for gleanTestRule
 class DefaultTabManagerControllerTest {
-    @MockK(relaxed = true)
+    @RelaxedMockK
     private lateinit var trayStore: TabsTrayStore
 
-    @MockK(relaxed = true)
+    @RelaxedMockK
     private lateinit var browserStore: BrowserStore
 
-    @MockK(relaxed = true)
+    @RelaxedMockK
+    private lateinit var browsingModeManager: BrowsingModeManager
+
+    @RelaxedMockK
     private lateinit var navController: NavController
 
-    @MockK(relaxed = true)
+    @RelaxedMockK
     private lateinit var profiler: Profiler
 
-    @MockK(relaxed = true)
+    @RelaxedMockK
     private lateinit var tabsUseCases: TabsUseCases
 
-    @MockK(relaxed = true)
+    @RelaxedMockK
     private lateinit var fenixBrowserUseCases: FenixBrowserUseCases
 
-    @MockK(relaxed = true)
+    @RelaxedMockK
     private lateinit var accountManager: FxaAccountManager
 
     private lateinit var loadUrlUseCase: SessionUseCases.DefaultLoadUrlUseCase
@@ -271,7 +276,7 @@ class DefaultTabManagerControllerTest {
 
     @Test
     fun `GIVEN the user is on the synced tabs page WHEN the fab is clicked THEN fire off a sync action`() {
-        every { trayStore.state.syncing } returns false
+        every { trayStore.state.sync.isSyncing } returns false
 
         createController().handleSyncedTabsFabClick()
 
@@ -280,7 +285,7 @@ class DefaultTabManagerControllerTest {
 
     @Test
     fun `GIVEN the user is on the synced tabs page and there is already an active sync WHEN the fab is clicked THEN no action should be taken`() {
-        every { trayStore.state.syncing } returns true
+        every { trayStore.state.sync.isSyncing } returns true
 
         createController().handleSyncedTabsFabClick()
 
@@ -721,17 +726,17 @@ class DefaultTabManagerControllerTest {
         val tab2 = TabsTrayItem.Tab(tab = createTab(id = "2", url = "www.google.com"))
         val controller = createController()
         trayStore.dispatch(TabsTrayAction.EnterSelectMode)
-        trayStore.dispatch(TabsTrayAction.AddSelectTab(tab1))
-        trayStore.dispatch(TabsTrayAction.AddSelectTab(tab2))
+        trayStore.dispatch(TabsTrayAction.AddSelectTabItem(tab1))
+        trayStore.dispatch(TabsTrayAction.AddSelectTabItem(tab2))
 
         controller.handleTabSelected(tab1, "Tab Manager")
-        middleware.assertLastAction(TabsTrayAction.RemoveSelectTab::class) {
-            assertEquals(tab1, it.tab)
+        middleware.assertLastAction(TabsTrayAction.RemoveSelectTabItem::class) {
+            assertEquals(tab1, it.item)
         }
 
         controller.handleTabSelected(tab2, "Tab Manager")
-        middleware.assertLastAction(TabsTrayAction.RemoveSelectTab::class) {
-            assertEquals(tab2, it.tab)
+        middleware.assertLastAction(TabsTrayAction.RemoveSelectTabItem::class) {
+            assertEquals(tab2, it.item)
         }
     }
 
@@ -745,12 +750,12 @@ class DefaultTabManagerControllerTest {
         val tab2 = TabsTrayItem.Tab(tab = createTab(id = "2", url = "www.google.com"))
 
         trayStore.dispatch(TabsTrayAction.EnterSelectMode)
-        trayStore.dispatch(TabsTrayAction.AddSelectTab(tab1))
+        trayStore.dispatch(TabsTrayAction.AddSelectTabItem(tab1))
 
         controller.handleTabSelected(tab2, "Tab Manager")
 
-        middleware.assertLastAction(TabsTrayAction.AddSelectTab::class) {
-            assertEquals(tab2, it.tab)
+        middleware.assertLastAction(TabsTrayAction.AddSelectTabItem::class) {
+            assertEquals(tab2, it.item)
         }
     }
 
@@ -774,12 +779,12 @@ class DefaultTabManagerControllerTest {
         )
 
         trayStore.dispatch(TabsTrayAction.EnterSelectMode)
-        trayStore.dispatch(TabsTrayAction.AddSelectTab(normalTab))
+        trayStore.dispatch(TabsTrayAction.AddSelectTabItem(normalTab))
 
         controller.handleTabSelected(inactiveTab, INACTIVE_TABS_FEATURE_NAME)
 
-        middleware.assertLastAction(TabsTrayAction.AddSelectTab::class) {
-            assertEquals(normalTab, it.tab)
+        middleware.assertLastAction(TabsTrayAction.AddSelectTabItem::class) {
+            assertEquals(normalTab, it.item)
         }
     }
 
@@ -1065,22 +1070,31 @@ class DefaultTabManagerControllerTest {
                 tabs = listOf(normalTabData, privateTabData),
             ),
         )
-        val appStore = AppStore(AppState(mode = BrowsingMode.Normal))
+        var appStateModeUpdate: BrowsingMode? = null
+        browsingModeManager = DefaultBrowsingModeManager(
+            intent = null,
+            settings = settings,
+            onModeChange = { updatedMode ->
+                appStateModeUpdate = updatedMode
+            },
+        )
 
-        val controller = createController(appStore = appStore)
+        val controller = createController()
 
         browserStore.dispatch(TabListAction.SelectTabAction(privateTab.id))
         controller.handleTabSelected(privateTab, null)
 
         assertEquals(privateTab.id, browserStore.state.selectedTabId)
-        assertEquals(true, appStore.state.mode.isPrivate)
+        assertEquals(true, browsingModeManager.mode.isPrivate)
+        assertEquals(BrowsingMode.Private, appStateModeUpdate)
 
         controller.handleTabDeletion("privateTab")
         browserStore.dispatch(TabListAction.SelectTabAction(normalTab.id))
         controller.handleTabSelected(normalTab, null)
 
         assertEquals(normalTab.id, browserStore.state.selectedTabId)
-        assertEquals(false, appStore.state.mode.isPrivate)
+        assertEquals(false, browsingModeManager.mode.isPrivate)
+        assertEquals(BrowsingMode.Normal, appStateModeUpdate)
     }
 
     @Test
@@ -1135,7 +1149,7 @@ class DefaultTabManagerControllerTest {
         createController().handleTabLongClick(currentTab)
 
         assertNotNull(Collections.longPress.testGetValue())
-        verify { trayStore.dispatch(TabsTrayAction.AddSelectTab(currentTab)) }
+        verify { trayStore.dispatch(TabsTrayAction.AddSelectTabItem(currentTab)) }
     }
 
     @Test
@@ -1555,7 +1569,6 @@ class DefaultTabManagerControllerTest {
     )
 
     private fun createController(
-        appStore: AppStore = this.appStore,
         navigateToHomeAndDeleteSession: (String) -> Unit = { },
         showUndoSnackbarForTab: (Boolean) -> Unit = { _ -> },
         showUndoSnackbarForInactiveTab: (Int) -> Unit = { _ -> },
@@ -1571,6 +1584,7 @@ class DefaultTabManagerControllerTest {
             tabsTrayStore = trayStore,
             browserStore = browserStore,
             settings = settings,
+            browsingModeManager = browsingModeManager,
             navController = navController,
             navigateToHomeAndDeleteSession = navigateToHomeAndDeleteSession,
             profiler = profiler,

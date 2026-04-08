@@ -4,8 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import { createRawValuesObject } from "./helpers.mjs";
-import { SYSTEM_COLORS } from "./referenceColors.mjs";
+import { SYSTEM_COLORS, createRawValuesObject } from "./helpers.mjs";
 
 /**
  * @typedef {object} PropertyTypeConfig
@@ -18,6 +17,7 @@ import { SYSTEM_COLORS } from "./referenceColors.mjs";
  * @property {string[]} [allowedUnits] Specific unit types allowed (e.g., ["em", "ch", "%"]). If provided, only these units are allowed when allowUnits is true
  * @property {Record<string, string>} [customFixes] Map of raw values to their token replacements for autofix
  * @property {Record<string, string>} [customSuggestions] Map of raw values to their token replacements for suggested fixes
+ * @property {boolean} [warnSystemColors] Whether to warn about system colors when there are no suitable tokens to use.
  */
 
 const customColorFixes = {
@@ -147,12 +147,12 @@ const BackgroundColor = {
     "--toolbarbutton-hover-background",
     "--toolbox-bgcolor-inactive",
     "--toolbox-bgcolor",
-    "--urlbar-box-active-bgcolor",
-    "--urlbar-box-bgcolor",
-    "--urlbar-box-focus-bgcolor",
-    "--urlbar-box-hover-bgcolor",
-    "--urlbarView-highlight-background",
-    "--urlbarView-hover-background",
+    "--urlbar-box-background-color",
+    "--urlbar-box-background-color-focus",
+    "--urlbar-box-background-color-hover",
+    "--urlbar-box-background-color-active",
+    "--urlbarview-background-color-hover",
+    "--urlbarview-background-color-selected",
     "--urlbarView-result-button-hover-background-color",
     "--urlbarView-result-button-selected-background-color",
   ],
@@ -160,6 +160,7 @@ const BackgroundColor = {
   aliasTokenTypes: ["color", "text-color", "border-color", "icon-color"],
   customFixes: customColorFixes,
   customSuggestions: systemColorSuggestions,
+  warnSystemColors: true,
 };
 
 /** @type {PropertyTypeConfig} */
@@ -286,6 +287,7 @@ const BorderColor = {
   aliasTokenTypes: ["color", "background-color", "text-color"],
   customFixes: customColorFixes,
   customSuggestions: systemColorSuggestions,
+  warnSystemColors: true,
 };
 
 /** @type {PropertyTypeConfig} */
@@ -358,13 +360,16 @@ const TextColor = {
   aliasTokenTypes: ["color", "background-color", "border-color"],
   customFixes: customColorFixes,
   customSuggestions: systemColorSuggestions,
+  warnSystemColors: true,
 };
 
 /** @type {PropertyTypeConfig} */
 const Space = {
-  allow: ["0", "auto"],
+  allow: ["0", "1px", "auto"],
   tokenTypes: ["space"],
   aliasTokenTypes: ["dimension"],
+  allowUnits: true,
+  allowedUnits: ["ch", "em", "lh"],
   customFixes: {
     "2px": "var(--space-xxsmall)",
     "4px": "var(--space-xsmall)",
@@ -378,11 +383,20 @@ const Space = {
 
 /** @type {PropertyTypeConfig} */
 const Size = {
-  allow: ["0", "auto", "none", "fit-content", "min-content", "max-content"],
+  allow: [
+    "0",
+    "1px",
+    "auto",
+    "none",
+    "fit-content",
+    "min-content",
+    "max-content",
+    "stretch",
+  ],
   tokenTypes: ["size", "icon-size"],
   aliasTokenTypes: ["dimension"],
   allowUnits: true,
-  allowedUnits: ["em", "ch", "%", "vh", "vw"],
+  allowedUnits: ["%", "ch", "em", "vh", "vw"],
   customFixes: {
     ...createRawValuesObject(["size", "icon-size"]),
     "0.75rem": "var(--size-item-xsmall)",

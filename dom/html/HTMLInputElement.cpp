@@ -1,5 +1,3 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ts=8 sts=2 et sw=2 tw=80: */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -723,7 +721,7 @@ static bool IsPickerBlocked(Document* aDoc) {
   }
 
   nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "DOM"_ns, aDoc,
-                                  nsContentUtils::eDOM_PROPERTIES,
+                                  PropertiesFile::DOM_PROPERTIES,
                                   "InputPickerBlockedNoUserActivation");
   return true;
 }
@@ -888,7 +886,7 @@ nsresult HTMLInputElement::InitColorPicker() {
 
   // Get Loc title
   nsAutoString title;
-  nsContentUtils::GetLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+  nsContentUtils::GetLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                      "ColorPicker", title);
 
   nsCOMPtr<nsIColorPicker> colorPicker =
@@ -939,14 +937,14 @@ nsresult HTMLInputElement::InitFilePicker(FilePickerType aType) {
   nsAutoString title;
   nsAutoString okButtonLabel;
   if (aType == FILE_PICKER_DIRECTORY) {
-    nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+    nsContentUtils::GetMaybeLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                             "DirectoryUpload", doc, title);
 
-    nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+    nsContentUtils::GetMaybeLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                             "DirectoryPickerOkButtonLabel", doc,
                                             okButtonLabel);
   } else {
-    nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+    nsContentUtils::GetMaybeLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                             "FileUpload", doc, title);
   }
 
@@ -1164,6 +1162,7 @@ HTMLInputElement::HTMLInputElement(already_AddRefed<dom::NodeInfo>&& aNodeInfo,
       mPickerRunning(false),
       mHasBeenTypePassword(false),
       mHasPatternAttribute(false),
+      mUserChangedSinceFocus(false),
       mRadioGroupContainer(nullptr) {
   // If size is above 512, mozjemalloc allocates 1kB, see
   // memory/build/mozjemalloc.cpp
@@ -1195,14 +1194,15 @@ HTMLInputElement::~HTMLInputElement() {
     StopNumberControlSpinnerSpin(eDisallowDispatchingEvents);
   }
   nsImageLoadingContent::Destroy();
-  FreeData();
+  FreeData(TextControlStateDisposition::Destroy);
 }
 
-void HTMLInputElement::FreeData() {
+void HTMLInputElement::FreeData(TextControlStateDisposition aStateDisposition) {
   if (!IsSingleLineTextControl(false)) {
     free(mInputData.mValue);
     mInputData.mValue = nullptr;
-  } else if (mInputData.mState) {
+  } else if (mInputData.mState &&
+             aStateDisposition == TextControlStateDisposition::Destroy) {
     mInputData.mState->Destroy();
     mInputData.mState = nullptr;
   }
@@ -1873,7 +1873,7 @@ void HTMLInputElement::SetValue(const nsAString& aValue, CallerType aCallerType,
         return;
       }
 
-      if (mFocusedValue.Equals(currentValue)) {
+      if (!State().HasState(ElementState::FOCUS)) {
         GetValue(mFocusedValue, aCallerType);
       }
     } else {
@@ -1956,7 +1956,7 @@ void HTMLInputElement::GetValueAsDate(JSContext* aCx,
         return;
       }
 
-      time.emplace(JS::TimeClip(millisecond));
+      time.emplace(JS::TimeClip(int64_t(millisecond)));
       MOZ_ASSERT(time->toDouble() == millisecond,
                  "HTML times are restricted to the day after the epoch and "
                  "never clip");
@@ -2652,15 +2652,14 @@ void HTMLInputElement::GetDisplayFileName(nsAString& aValue) const {
   if (mFileData->mFilesOrDirectories.IsEmpty()) {
     if (StaticPrefs::dom_webkitBlink_dirPicker_enabled() &&
         HasAttr(nsGkAtoms::webkitdirectory)) {
-      nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
-                                              "NoDirSelected", OwnerDoc(),
-                                              value);
+      nsContentUtils::GetMaybeLocalizedString(
+          PropertiesFile::FORMS_PROPERTIES, "NoDirSelected", OwnerDoc(), value);
     } else if (HasAttr(nsGkAtoms::multiple)) {
-      nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+      nsContentUtils::GetMaybeLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                               "NoFilesSelected", OwnerDoc(),
                                               value);
     } else {
-      nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+      nsContentUtils::GetMaybeLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                               "NoFileSelected", OwnerDoc(),
                                               value);
     }
@@ -2669,7 +2668,7 @@ void HTMLInputElement::GetDisplayFileName(nsAString& aValue) const {
     count.AppendInt(int(mFileData->mFilesOrDirectories.Length()));
 
     nsContentUtils::FormatMaybeLocalizedString(
-        value, nsContentUtils::eFORMS_PROPERTIES, "XFilesSelected", OwnerDoc(),
+        value, PropertiesFile::FORMS_PROPERTIES, "XFilesSelected", OwnerDoc(),
         count);
   }
 
@@ -2810,11 +2809,17 @@ void HTMLInputElement::FireChangeEventIfNeeded() {
   if (mValueChanged) {
     SetUserInteracted(true);
   }
+  const bool changedByUser = mUserChangedSinceFocus;
+  mUserChangedSinceFocus = false;
   if (mFocusedValue.Equals(value)) {
     return;
   }
-  // Dispatch the change event.
   mFocusedValue = value;
+  if (!changedByUser) {
+    // value was changed, but only by scripts
+    return;
+  }
+  // Dispatch the change event.
   nsContentUtils::DispatchTrustedEvent(
       OwnerDoc(), static_cast<nsIContent*>(this), u"change"_ns, CanBubble::eYes,
       Cancelable::eNo);
@@ -2884,6 +2889,10 @@ nsresult HTMLInputElement::SetValueInternal(
   // read it only on chrome docs or something? That'd allow front-end code to
   // move away from xul without weird side-effects.
   const bool forcePreserveUndoHistory = mParent && mParent->IsXULElement();
+
+  if (aOptions.contains(ValueSetterOption::BySetUserInputAPI)) {
+    mUserChangedSinceFocus = true;
+  }
 
   switch (GetValueMode()) {
     case VALUE_MODE_VALUE: {
@@ -2964,10 +2973,14 @@ nsresult HTMLInputElement::SetValueInternal(
         nsColorControlFrame* colorControlFrame =
             do_QueryFrame(GetPrimaryFrame());
         if (colorControlFrame) {
+          AutoWeakFrame weakFrame(colorControlFrame);
           colorControlFrame->UpdateColor();
 #ifdef ACCESSIBILITY
-          if (nsAccessibilityService* accService = GetAccService()) {
-            accService->ColorValueChanged(colorControlFrame->PresShell(), this);
+          if (weakFrame.IsAlive()) {
+            if (nsAccessibilityService* accService = GetAccService()) {
+              accService->ColorValueChanged(colorControlFrame->PresShell(),
+                                            this);
+            }
           }
 #endif
         }
@@ -4514,7 +4527,6 @@ void HTMLInputElement::SetupShadowTree(bool aNotify) {
   MOZ_ASSERT(CreatesUAShadowTree());
   MOZ_ASSERT(IsInComposedDoc());
   MOZ_ASSERT(!GetShadowRoot());
-  MOZ_ASSERT(mDoneCreating);
 
   auto uaWidget = NotifiesUAWidget();
   AttachAndSetUAShadowRoot(uaWidget,
@@ -4707,23 +4719,31 @@ void HTMLInputElement::HandleTypeChange(FormControlType aNewType,
     GetValue(oldValue, CallerType::NonSystem);
   }
 
-  TextControlState::SelectionProperties sp;
-
-  if (IsSingleLineTextControl(false) && mInputData.mState) {
+  const bool wasTextControl = IsSingleLineTextControl(false, oldType);
+  const bool isTextControl = IsSingleLineTextControl(false, aNewType);
+  if (wasTextControl && !isTextControl && mInputData.mState) {
     mInputData.mState->DeinitSelection();
-    sp = mInputData.mState->GetSelectionProperties();
   }
 
   // We already have a copy of the value, lets free it and changes the type.
-  FreeData();
+  FreeData(isTextControl ? TextControlStateDisposition::Reuse
+                         : TextControlStateDisposition::Destroy);
   mType = aNewType;
   void* memory = mInputTypeMem;
   mInputType = InputType::Create(this, mType, memory);
 
-  if (IsSingleLineTextControl()) {
-    mInputData.mState = TextControlState::Construct(this);
-    if (!sp.IsDefault()) {
-      mInputData.mState->SetSelectionProperties(sp);
+  if (isTextControl) {
+    if (!mInputData.mState) {
+      mInputData.mState = TextControlState::Construct(this);
+    } else {
+      if (!SupportsTextSelection(oldType)) {
+        // Collapse our selection if whether we honor
+        // selection{Start,End,select()} has changed.
+        mInputData.mState->SetSelectionRange(
+            0, 0, SelectionDirection::Forward, IgnoreErrors(),
+            TextControlState::ScrollAfterSelection::No);
+      }
+      mInputData.mState->UpdateEditorOnTypeChange();
     }
   }
 
@@ -4885,14 +4905,19 @@ void HTMLInputElement::HandleTypeChange(FormControlType aNewType,
     if (mDoneCreating) {
       const auto oldNotifiesUAWidget = NotifiesUAWidget(oldType);
       if (CreatesUAShadowTree()) {
-        const auto notifiesUAWidget = NotifiesUAWidget();
-        if (oldNotifiesUAWidget == notifiesUAWidget &&
-            notifiesUAWidget == NotifyUAWidget::Yes) {
-          NotifyUAWidgetSetupOrChange();
+        if (wasTextControl && isTextControl) {
+          // Keep existing shadow
+          UpdateTextEditorShadowTree();
         } else {
-          TeardownUAShadowRoot(oldNotifiesUAWidget);
-          if (notifiesUAWidget == NotifyUAWidget::Yes) {
-            SetupShadowTree(aNotify);
+          const auto notifiesUAWidget = NotifiesUAWidget();
+          if (oldNotifiesUAWidget == notifiesUAWidget &&
+              notifiesUAWidget == NotifyUAWidget::Yes) {
+            NotifyUAWidgetSetupOrChange();
+          } else {
+            TeardownUAShadowRoot(oldNotifiesUAWidget);
+            if (notifiesUAWidget == NotifyUAWidget::Yes) {
+              SetupShadowTree(aNotify);
+            }
           }
         }
       } else {
@@ -6211,7 +6236,7 @@ HTMLInputElement::SubmitNamesValues(FormData* aFormData) {
       !HasAttr(nsGkAtoms::value)) {
     // Get our default value, which is the same as our default label
     nsAutoString defaultValue;
-    nsContentUtils::GetMaybeLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+    nsContentUtils::GetMaybeLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                             "Submit", OwnerDoc(), defaultValue);
     value = defaultValue;
   }
@@ -7168,6 +7193,9 @@ void HTMLInputElement::OnValueChanged(ValueChangeKind aKind,
   if (aKind != ValueChangeKind::Internal) {
     mLastValueChangeWasInteractive = aKind == ValueChangeKind::UserInteraction;
 
+    if (mLastValueChangeWasInteractive) {
+      mUserChangedSinceFocus = true;
+    }
     if (mLastValueChangeWasInteractive &&
         State().HasState(ElementState::AUTOFILL)) {
       RemoveStates(ElementState::AUTOFILL | ElementState::AUTOFILL_PREVIEW);
@@ -7393,7 +7421,7 @@ void HTMLInputElement::SetFilePickerFiltersFromAccept(
   // Add "All Supported Types" filter
   if (filters.Length() > 1) {
     nsAutoString title;
-    nsContentUtils::GetLocalizedString(nsContentUtils::eFORMS_PROPERTIES,
+    nsContentUtils::GetLocalizedString(PropertiesFile::FORMS_PROPERTIES,
                                        "AllSupportedTypes", title);
     filePicker->AppendFilter(title, allExtensionsList);
   }

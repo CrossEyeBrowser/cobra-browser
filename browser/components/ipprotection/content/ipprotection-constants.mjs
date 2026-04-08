@@ -10,35 +10,21 @@ export const LINKS = Object.freeze({
         "browser.ipProtection.productVpn.endpoint",
         "https://www.mozilla.org"
       ) +
-      "/products/vpn/?utm_medium=firefox-desktop&utm_source=freevpnpilot&utm_campaign=evergreen&utm_content=vpnpanel"
+      "/products/vpn/?utm_medium=firefox-desktop&utm_source=vpn-panel&utm_campaign=fx-vpn&utm_content=upgrade-button"
     );
   },
 
-  SUPPORT_URL: "https://support.mozilla.org/kb/use-ip-concealment-in-firefox",
-});
-
-export const ERRORS = Object.freeze({
-  GENERIC: "generic-error",
-  NETWORK: "network-error",
-  TIMEOUT: "timeout-error", // Activation took too long and was aborted
-  MISSING_PROMISE: "missing-activation-promise", // Expected promise was not returned
-  MISSING_ABORT: "missing-abort-controller", // Expected abort controller was not returned
-  PASS_UNAVAILABLE: "pass-unavailable", // No pass was returned from the server
-  SERVER_NOT_FOUND: "server-not-found", // No server was found for the location
+  SUPPORT_SLUG: "built-in-vpn",
 });
 
 export const SIGNIN_DATA = Object.freeze({
   where: "tab",
-  entrypoint: "desktop-fx-vpn",
+  entrypoint: "vpn_integration_panel",
   autoClose: false,
   extraParams: {
-    service: "sync",
-    entrypoint_experiment: "fx-vpn-pilot",
-    entrypoint_variation: "alpha",
-    utm_source: "callout",
-    utm_campaign: "fx-vpn-pilot",
+    service: "vpn",
+    utm_campaign: "fx-vpn",
     utm_medium: "firefox-desktop",
-    utm_term: "fx-vpn-pilot-panel-button",
   },
 });
 

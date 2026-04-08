@@ -1029,11 +1029,7 @@
   <string name="customize_addon_collection_user_hint">ساهاو کتن (شناسه منتوری)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">کتن وردنی یل آلشت وابیڌه. سی ائمال آلشتکاریا برنومه ن بووندین…</string>
-  <!--
-    Customize Home
-
-    Header text for jumping back into the recent tab in customize the home screen
-  -->
+  <!-- Header text for jumping back into the recent tab in customize the home screen -->
   <string name="customize_toggle_jump_back_in">وورگرتین و من</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">نشووکا</string>
@@ -1499,12 +1495,8 @@
   <string name="studies_remove">پاک کردن</string>
   <!-- Title of the active section on the studies list -->
   <string name="studies_active">فعال</string>
-  <!-- Description for studies -->
-  <string name="studies_description_3" moz:removedIn="148" tools:ignore="UnusedResources">ویژیی یل وو ایده یل ن پؽش ز تیجنیڌن سی پوی امتهووݩ کۊنین.</string>
   <!-- Description for studies. Note: The word "Firefox" should NOT be translated -->
   <string name="studies_description_4" tools:ignore="BrandUsage">Firefox و هالت تساڌۊفی منتورا ن سی آزمایش ویژیی یل پسند اکونه، ک ای کار کیفیت ن سی پوی وا روء ابره.</string>
-  <!-- Title of the Studies data preference -->
-  <string name="studies_title" moz:removedIn="148" tools:ignore="UnusedResources">پۊرنیڌن وو ره وندن خۊندنیا</string>
   <!-- Title of the Studies data preference -->
   <string name="studies_title_2">هشتن خۊندنیا ویژیی</string>
   <!-- Learn more link for studies, links to an article for more information about studies. -->
@@ -1641,8 +1633,8 @@
   <string name="create_tab_group_save_button">زفت</string>
   <string name="edit_tab_group_bottom_sheet_close_content_description">بستن بونکۊ بلگه آلشت</string>
   <!-- Default tab group name when creating a tab group -->
-  <string name="create_tab_group_default_name">بونکۊ</string>
-  <!-- Label for the tab group name field in the bottom sheet to create a new tab group. -->
+  <string name="create_tab_group_default_name" tools:ignore="UnusedResources" moz:removedIn="150">بونکۊ</string>
+  <!-- Label for the tab group name field in the bottom sheet to create or edit a tab group. -->
   <string name="create_tab_group_name_label">نوم</string>
   <!--
     History
@@ -1978,7 +1970,7 @@
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">آلشت</string>
   <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button">لف گیری</string>
+  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">لف گیری</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">یک رسۊوی</string>
   <!-- Bookmark overflow menu select all bookmarks -->
@@ -2034,12 +2026,16 @@
   -->
   <string name="bookmark_deletion_snackbar_message">%1$s پاک وابی</string>
   <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion">وورگندن</string>
+  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">وورگندن</string>
   <!-- Bookmark snackbar message for deleting a single item. %s is the title of the item being deleted -->
-  <string name="bookmark_delete_single_item">%s پاک وابی</string>
+  <string name="bookmark_delete_single_item" tools:ignore="UnusedResources" moz:removedIn="150">%s پاک وابی</string>
   <!-- Bookmark snackbar message for deleting multiple items. %s is the number of items being deleted -->
-  <string name="bookmark_delete_multiple_items">مووردا پاک وابیڌه: %s</string>
-  <!-- Content description for the bookmark navigation bar back button -->
+  <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources" moz:removedIn="150">مووردا پاک وابیڌه: %s</string>
+  <!--
+    Bookmark undo button for deletion snackbar action
+
+    Content description for the bookmark navigation bar back button
+  -->
   <string name="bookmark_navigate_back_button_content_description">وورگشتن و عقب</string>
   <!-- Content description for the bookmark list new folder navigation bar button -->
   <string name="bookmark_add_new_folder_button_content_description">ٱووردن دوبلگه نۊ</string>
@@ -2308,23 +2304,23 @@
   -->
   <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">‏Firefox ن گشت گر پؽش فرزتووݩ بۊکۊنین</string>
   <!-- Title shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_title">گشت سیخومی ن ویر بگیرین</string>
+  <string name="notification_re_engagement_title" tools:ignore="UnusedResources" moz:removedIn="150">گشت سیخومی ن ویر بگیرین</string>
   <!--
     Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_text">من %1$s بؽ هیچ کۊکی یا ویرگار زفت وابیڌه ای بگردین</string>
+  <string name="notification_re_engagement_text" tools:ignore="UnusedResources" moz:removedIn="150">من %1$s بؽ هیچ کۊکی یا ویرگار زفت وابیڌه ای بگردین</string>
   <!-- Title A shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_A_title">بؽ رڌجۊری کردن گشت بزنین</string>
+  <string name="notification_re_engagement_A_title" tools:ignore="UnusedResources" moz:removedIn="150">بؽ رڌجۊری کردن گشت بزنین</string>
   <!--
     Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name.
   -->
-  <string name="notification_re_engagement_A_text">گشت سیخومی من %1$s دووسمندیا ایسا ن زفت نؽکونه.</string>
+  <string name="notification_re_engagement_A_text" tools:ignore="UnusedResources" moz:removedIn="150">گشت سیخومی من %1$s دووسمندیا ایسا ن زفت نؽکونه.</string>
   <!-- Title B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_title">بنه پا پیتینیڌن ٱولیت</string>
+  <string name="notification_re_engagement_B_title" tools:ignore="UnusedResources" moz:removedIn="150">بنه پا پیتینیڌن ٱولیت</string>
   <!-- Text B shown in the notification that pops up to re-engage the user -->
-  <string name="notification_re_engagement_B_text">ی چی و هیم نهنگا ن بپیتینین. یا ی چی جالو ن بجۊرین.</string>
+  <string name="notification_re_engagement_B_text" tools:ignore="UnusedResources" moz:removedIn="150">ی چی و هیم نهنگا ن بپیتینین. یا ی چی جالو ن بجۊرین.</string>
   <!--
     Survey
 
@@ -2377,8 +2373,6 @@
   <string name="preference_accessibility_text_size_summary">هؽل ن من وبگه یل گفتر یا کۊچیر تر کۊنین</string>
   <!-- Title for Accessibility Text Size Scaling Preference -->
   <string name="preference_accessibility_font_size_title">هندا فونت</string>
-  <!-- %d is the percentage of the slide bar for setting the text font size and %% will be announced as "percent". -->
-  <string name="a11y_preference_accessibility_font_size_percentage" tools:ignore="UnusedResources" moz:removedIn="148">%d %%.</string>
   <!-- Title for Accessibility Text Automatic Size Scaling Preference -->
   <string name="preference_accessibility_auto_size_2">هندا فونت خوتکار</string>
   <!-- Summary for Accessibility Text Automatic Size Scaling Preference -->
@@ -3402,7 +3396,7 @@
   <!-- The title of the warning card informs the user that the list of languages cannot be loaded. -->
   <string name="translation_error_could_not_load_languages_warning_text">نترستیم زووا ن دانلود کۊنیم. منپیز اینترنت خوتووݩ ن واجۊری کۊنین وو دووارته قپ ریت کۊنین.</string>
   <!-- The title of the warning card informs the user that a language is not supported. %1$s is the name of the language that is not supported. -->
-  <string name="translation_error_language_not_supported_warning_text">وابخشی، ایما هنی ز %1$s لادراری نؽکۊنیم.</string>
+  <string name="translation_error_language_not_supported_warning_text" tools:ignore="UnusedResources" moz:removedIn="150">وابخشی، ایما هنی ز %1$s لادراری نؽکۊنیم.</string>
   <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
   <string name="translation_in_progress_snackbar">ولرنیڌن هونی ٱنجوم ابۊ…</string>
   <!--
@@ -3726,6 +3720,8 @@
   <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_private">ٱووردن و بلگه یل سیخومی</string>
   <!--
     Microsurvey
+    Note: Some strings are marked as unused as they are referenced via the Nimbus experimentation
+    platform and have no persistent reference in code
 
     Prompt view
 
